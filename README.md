@@ -23,11 +23,14 @@ kill <プロセスID>
 kill $(lsof -t -i :3000)
 ```
 
-
-
 ## quic-goパッケージの取得
-パッケージインストールには、以下のコマンドを実行します：
+
+パッケージをインストールするには、以下のコマンドを実行します：
 
 ```bash
 go get github.com/quic-go/quic-go
 ```
+
+### 参考資料
+
+- [quic-goサーバーの実装例](https://qiita.com/mochi_2225/items/3a3d37b403f3b7a5c46d)
