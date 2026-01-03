@@ -1,0 +1,7 @@
+# PDFファイルを除外
+*.pdf
+
+# macOS
+.DS_Store
+**/.DS_Store
+
