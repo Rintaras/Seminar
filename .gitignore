@@ -5,3 +5,11 @@
 .DS_Store
 **/.DS_Store
 
+# Go
+# ビルドされたバイナリ
+vol.2/HTTP3/client/client
+vol.2/HTTP3/server/server
+
+# ログファイル
+*.log
+

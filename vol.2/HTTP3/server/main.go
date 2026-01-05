@@ -38,7 +38,7 @@ func main() {
 		}
 
 		log.Print("New Client Connection Accepted")
-		go func(stream quic.Stream) {
+		go func(stream *quic.Stream) {
 			s := bufio.NewScanner(stream)
 			for s.Scan() {
 				msg := s.Text()
