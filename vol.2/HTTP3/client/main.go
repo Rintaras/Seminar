@@ -1,46 +1,42 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
+	"fmt"
+	"io"
 	"log"
-	"os"
+	"net/http"
 
-	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 )
 
 func main() {
-	w, err := os.Create("keylog.log")
+	// HTTP/3クライアントを作成
+	roundTripper := &http3.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	defer roundTripper.Close()
+
+	client := &http.Client{
+		Transport: roundTripper,
+	}
+
+	// HTTPリクエストを送信
+	resp, err := client.Get("https://localhost:12345/")
 	if err != nil {
-		log.Fatal("open file: ", err)
+		log.Fatal("request failed: ", err)
 	}
+	defer resp.Body.Close()
 
-	tlsConf := &tls.Config{
-		InsecureSkipVerify: true,
-		KeyLogWriter:       w,
-	}
-	quicConf := &quic.Config{}
-
-	conn, err := quic.DialAddr(context.Background(), "127.0.0.1:12345", tlsConf, quicConf)
+	// レスポンスを読み取る
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("dial: ", err)
+		log.Fatal("read response: ", err)
 	}
 
-	stream, err := conn.OpenStreamSync(context.Background())
-	if err != nil {
-		log.Fatal("open stream: ", err)
-	}
-	defer stream.Close()
-
-	if _, err = stream.Write([]byte("Hello, golang QUIC!!\n")); err != nil {
-		log.Fatal("write: ", err)
-	}
-
-	buf := make([]byte, 100)
-	n, err := stream.Read(buf)
-	if err != nil {
-		log.Fatal("read: ", err)
-	}
-
-	log.Printf("Accept Message: `%s`", buf[:n])
+	fmt.Printf("Status: %s\n", resp.Status)
+	fmt.Printf("Protocol: %s\n", resp.Proto)
+	fmt.Printf("Response:\n%s", body)
 }
