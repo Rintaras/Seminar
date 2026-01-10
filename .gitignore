@@ -7,6 +7,8 @@
 
 # Go
 # ビルドされたバイナリ
+vol.2/HTTP2/client/client
+vol.2/HTTP2/server/server
 vol.2/HTTP3/client/client
 vol.2/HTTP3/server/server
 

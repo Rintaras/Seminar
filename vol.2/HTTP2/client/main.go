@@ -7,22 +7,26 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/quic-go/quic-go/http3"
+	"golang.org/x/net/http2"
 )
 
 func main() {
-	// HTTP/3クライアント
-	transport := &http3.Transport{
+	// HTTP/2クライアント
+	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
 	}
-	defer transport.Close()
+
+	// HTTP/2を有効化
+	if err := http2.ConfigureTransport(transport); err != nil {
+		log.Fatal(err)
+	}
 
 	client := &http.Client{Transport: transport}
 
 	// リクエスト送信
-	resp, err := client.Get("https://localhost:3000/")
+	resp, err := client.Get("https://localhost:2000/")
 	if err != nil {
 		log.Fatal(err)
 	}
