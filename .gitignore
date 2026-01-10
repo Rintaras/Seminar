@@ -16,3 +16,6 @@ vol.2/HTTP3/server/server
 # Cursor IDE
 .cursor/
 
+# スクリプト（開発用）
+*.sh
+

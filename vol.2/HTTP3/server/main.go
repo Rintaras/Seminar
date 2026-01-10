@@ -46,14 +46,25 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 func main() {
 	// HTTPハンドラを設定
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Request: %s %s from %s (Protocol: %s)", r.Method, r.URL.Path, r.RemoteAddr, r.Proto)
+		isHTTP3 := r.ProtoMajor == 3
+		protocol := r.Proto
+		if isHTTP3 {
+			protocol = "HTTP/3 (h3) 🎉"
+		}
+
+		log.Printf("Request: %s %s from %s (Protocol: %s)", r.Method, r.URL.Path, r.RemoteAddr, protocol)
 
 		// HTTP/3が利用可能であることをブラウザに通知
 		w.Header().Set("Alt-Svc", `h3=":12345"; ma=2592000`)
 
-		fmt.Fprintf(w, "Hello HTTP/3 world!!\n")
+		fmt.Fprintf(w, "Hello from HTTP server!\n")
 		fmt.Fprintf(w, "Protocol: %s\n", r.Proto)
-		fmt.Fprintf(w, "You are connected via %s\n", r.Proto)
+		if isHTTP3 {
+			fmt.Fprintf(w, "✅ You are connected via HTTP/3! 🎉\n")
+		} else {
+			fmt.Fprintf(w, "ℹ️  You are connected via %s\n", r.Proto)
+			fmt.Fprintf(w, "💡 Tip: HTTP/3 is available but your browser chose %s\n", r.Proto)
+		}
 	})
 
 	// 自己署名証明書を生成
@@ -62,19 +73,7 @@ func main() {
 		log.Fatal("generate cert: ", err)
 	}
 
-	// HTTP/2サーバー設定（TCP）
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		NextProtos:   []string{"h2", "http/1.1"},
-	}
-
-	httpServer := &http.Server{
-		Addr:      ":12345",
-		Handler:   handler,
-		TLSConfig: tlsConfig,
-	}
-
-	// HTTP/3サーバー設定（UDP）
+	// HTTP/3サーバー設定（UDP）- ポート12345
 	http3Server := &http3.Server{
 		Addr:    ":12345",
 		Handler: handler,
@@ -83,15 +82,27 @@ func main() {
 		},
 	}
 
-	// HTTP/3サーバーを別のgoroutineで起動
+	// HTTP/2フォールバックサーバー設定（TCP）- ポート12346
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"h2", "http/1.1"},
+	}
+
+	httpServer := &http.Server{
+		Addr:      ":12346",
+		Handler:   handler,
+		TLSConfig: tlsConfig,
+	}
+
+	// HTTP/2サーバーを別のgoroutineで起動
 	go func() {
-		log.Println("HTTP/3 server (UDP) listening on https://localhost:12345")
-		if err := http3Server.ListenAndServe(); err != nil {
-			log.Printf("HTTP/3 server error: %v", err)
+		log.Println("HTTP/2 fallback server (TCP) listening on https://localhost:12346")
+		if err := httpServer.ListenAndServeTLS("", ""); err != nil {
+			log.Printf("HTTP/2 server error: %v", err)
 		}
 	}()
 
-	// HTTP/2サーバーを起動（メインgoroutine）
-	log.Println("HTTP/2 server (TCP) listening on https://localhost:12345")
-	log.Fatal(httpServer.ListenAndServeTLS("", ""))
+	// HTTP/3サーバーを起動（メインgoroutine）
+	log.Println("HTTP/3 server (UDP) listening on https://localhost:12345")
+	log.Fatal(http3Server.ListenAndServe())
 }
