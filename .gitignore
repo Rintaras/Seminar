@@ -36,5 +36,5 @@ vol.2/results/analysis/*.png
 vol.2/results/analysis/*.txt
 
 # Docker
-.dockerignore
+# (keep .dockerignore in repository)
 
