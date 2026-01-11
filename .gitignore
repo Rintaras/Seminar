@@ -9,10 +9,16 @@
 # ビルドされたバイナリ
 vol.2/HTTP2/client/client
 vol.2/HTTP2/server/server
+vol.2/HTTP2/benchmark-client/benchmark-client
 vol.2/HTTP3/client/client
 vol.2/HTTP3/server/server
+vol.2/HTTP3/benchmark-client/benchmark-client
 client
 server
+http2-benchmark
+http3-benchmark
+http2-server
+http3-server
 
 # ログファイル
 *.log
@@ -24,6 +30,11 @@ vol.2/cert/*.key
 # Cursor IDE
 .cursor/
 
-# スクリプト（開発用）
-*.sh
+# 実験結果
+vol.2/results/*.csv
+vol.2/results/analysis/*.png
+vol.2/results/analysis/*.txt
+
+# Docker
+.dockerignore
 
