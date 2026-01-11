@@ -11,9 +11,15 @@ vol.2/HTTP2/client/client
 vol.2/HTTP2/server/server
 vol.2/HTTP3/client/client
 vol.2/HTTP3/server/server
+client
+server
 
 # ログファイル
 *.log
+
+# 証明書ファイル
+vol.2/cert/*.crt
+vol.2/cert/*.key
 
 # Cursor IDE
 .cursor/

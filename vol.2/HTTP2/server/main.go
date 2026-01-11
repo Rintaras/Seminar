@@ -1,42 +1,13 @@
 package main
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"log"
-	"math/big"
 	"net/http"
-	"time"
+
+	"seminar/vol.2/cert"
 )
-
-// メモリ上に自己署名証明書を生成して返す
-func generateSelfSignedCert() (tls.Certificate, error) {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-
-	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}
-
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &priv.PublicKey, priv)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-
-	return tls.Certificate{
-		Certificate: [][]byte{der},
-		PrivateKey:  priv,
-	}, nil
-}
 
 func main() {
 	// HTTPハンドラ
@@ -45,8 +16,8 @@ func main() {
 		fmt.Fprintf(w, "Hello HTTP/2!\nProtocol: %s\n", r.Proto)
 	})
 
-	// 証明書生成
-	cert, err := generateSelfSignedCert()
+	// 証明書ロードまたは生成
+	certificate, err := cert.LoadOrGenerateCert()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -55,7 +26,7 @@ func main() {
 	server := &http.Server{
 		Addr: ":2000",
 		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
+			Certificates: []tls.Certificate{certificate},
 			NextProtos:   []string{"h2", "http/1.1"},
 		},
 	}
