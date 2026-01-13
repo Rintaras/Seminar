@@ -217,31 +217,33 @@ docker exec benchmark-client /app/scripts/run-benchmark.sh \
 #   └── http3_results.csv
 ```
 
-**複数実験セッション（11条件自動実行）**
+**複数実験セッション（30条件自動実行）**
 
 ```bash
 # セッション名を指定して複数条件を自動実行
 docker exec benchmark-client /app/scripts/run-experiments.sh [リクエスト数] [セッション名]
 
-# 例: 包括的な性能評価
+# 例: 包括的な性能評価（0-100ms を5ms間隔で詳細測定）
 docker exec benchmark-client /app/scripts/run-experiments.sh 100 comprehensive_test
 
 # セッション結果は以下のように整理されます:
 # results/session_20260113_080000_comprehensive_test/
 #   ├── session_info.txt                # セッション情報
-#   ├── delay_0ms_bw_unlimited/         # 理想環境（遅延0ms, 帯域無制限）
-#   │   ├── experiment_info.txt
-#   │   ├── http2_results.csv
-#   │   └── http3_results.csv
-#   ├── delay_10ms_bw_unlimited/        # 低遅延（10ms, 帯域無制限）
-#   ├── delay_50ms_bw_unlimited/        # 中遅延（50ms, 帯域無制限）
-#   ├── delay_100ms_bw_unlimited/       # 高遅延（100ms, 帯域無制限）
-#   ├── delay_200ms_bw_unlimited/       # 非常に高い遅延（200ms, 帯域無制限）
+#   ├── delay_0ms_bw_unlimited/         # 遅延0ms（帯域無制限）
+#   ├── delay_5ms_bw_unlimited/         # 遅延5ms
+#   ├── delay_10ms_bw_unlimited/        # 遅延10ms
+#   ├── delay_15ms_bw_unlimited/        # 遅延15ms
+#   ├── ...                             # 5ms刻みで継続
+#   ├── delay_95ms_bw_unlimited/        # 遅延95ms
+#   ├── delay_100ms_bw_unlimited/       # 遅延100ms
 #   ├── delay_0ms_bw_100mbit/           # 高速帯域（100Mbps）
 #   ├── delay_0ms_bw_10mbit/            # 中速帯域（10Mbps）
 #   ├── delay_0ms_bw_1mbit/             # 低速帯域（1Mbps）
+#   ├── delay_25ms_bw_10mbit/           # 複合条件（25ms, 10Mbps）
 #   ├── delay_50ms_bw_10mbit/           # 複合条件（50ms, 10Mbps）
+#   ├── delay_75ms_bw_10mbit/           # 複合条件（75ms, 10Mbps）
 #   ├── delay_100ms_bw_10mbit/          # 複合条件（100ms, 10Mbps）
+#   ├── delay_50ms_bw_1mbit/            # 複合条件（50ms, 1Mbps）
 #   └── delay_100ms_bw_1mbit/           # 過酷な条件（100ms, 1Mbps）
 ```
 

@@ -25,23 +25,45 @@ cat > "${SESSION_DIR}/session_info.txt" << EOF
 Session Name: ${SESSION_NAME}
 Start Time: $(date '+%Y-%m-%d %H:%M:%S')
 Requests per condition: ${NUM_REQUESTS}
-Total conditions: 11
+Total conditions: 30
 EOF
 
 # 実験パターン定義
 # [遅延(ms), 帯域幅, 実験名]
 conditions=(
-    "0 0 delay_0ms_bw_unlimited"        # ベースライン（理想環境・帯域無制限）
-    "10 0 delay_10ms_bw_unlimited"      # 低遅延
-    "50 0 delay_50ms_bw_unlimited"      # 中遅延
-    "100 0 delay_100ms_bw_unlimited"    # 高遅延
-    "200 0 delay_200ms_bw_unlimited"    # 非常に高い遅延
-    "0 100mbit delay_0ms_bw_100mbit"    # 高速帯域
-    "0 10mbit delay_0ms_bw_10mbit"      # 中速帯域
-    "0 1mbit delay_0ms_bw_1mbit"        # 低速帯域
-    "50 10mbit delay_50ms_bw_10mbit"    # 中遅延 + 中速帯域
-    "100 10mbit delay_100ms_bw_10mbit"  # 高遅延 + 中速帯域
-    "100 1mbit delay_100ms_bw_1mbit"    # 高遅延 + 低速帯域
+    # 遅延のみ（帯域無制限）- 5ms間隔で詳細測定
+    "0 0 delay_0ms_bw_unlimited"
+    "5 0 delay_5ms_bw_unlimited"
+    "10 0 delay_10ms_bw_unlimited"
+    "15 0 delay_15ms_bw_unlimited"
+    "20 0 delay_20ms_bw_unlimited"
+    "25 0 delay_25ms_bw_unlimited"
+    "30 0 delay_30ms_bw_unlimited"
+    "35 0 delay_35ms_bw_unlimited"
+    "40 0 delay_40ms_bw_unlimited"
+    "45 0 delay_45ms_bw_unlimited"
+    "50 0 delay_50ms_bw_unlimited"
+    "55 0 delay_55ms_bw_unlimited"
+    "60 0 delay_60ms_bw_unlimited"
+    "65 0 delay_65ms_bw_unlimited"
+    "70 0 delay_70ms_bw_unlimited"
+    "75 0 delay_75ms_bw_unlimited"
+    "80 0 delay_80ms_bw_unlimited"
+    "85 0 delay_85ms_bw_unlimited"
+    "90 0 delay_90ms_bw_unlimited"
+    "95 0 delay_95ms_bw_unlimited"
+    "100 0 delay_100ms_bw_unlimited"
+    # 帯域制限のみ（遅延なし）
+    "0 100mbit delay_0ms_bw_100mbit"
+    "0 10mbit delay_0ms_bw_10mbit"
+    "0 1mbit delay_0ms_bw_1mbit"
+    # 複合条件（代表的なもの）
+    "25 10mbit delay_25ms_bw_10mbit"
+    "50 10mbit delay_50ms_bw_10mbit"
+    "75 10mbit delay_75ms_bw_10mbit"
+    "100 10mbit delay_100ms_bw_10mbit"
+    "50 1mbit delay_50ms_bw_1mbit"
+    "100 1mbit delay_100ms_bw_1mbit"
 )
 
 total=${#conditions[@]}
