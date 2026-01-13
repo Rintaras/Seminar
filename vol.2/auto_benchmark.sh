@@ -105,30 +105,56 @@ if [ -n "$LATEST_SESSION" ]; then
         
         # グラフ生成
         echo "グラフを生成中..."
-        python3 vol.2/scripts/analyze_results.py "$LATEST_SESSION"
-        
-        # 結果表示
-        echo ""
-        echo "========================================="
-        echo "✅ すべて完了！"
-        echo "========================================="
-        echo ""
-        echo "📁 結果ディレクトリ:"
-        echo "   $LATEST_SESSION"
-        echo ""
-        echo "📊 生成されたグラフ:"
-        ls -lh "$LATEST_SESSION/analysis/" 2>/dev/null | tail -n +2
-        echo ""
-        echo "📄 レポート:"
-        echo "   $LATEST_SESSION/analysis/summary_report.txt"
-        echo ""
-        
-        # サマリーレポートの一部を表示
-        if [ -f "$LATEST_SESSION/analysis/summary_report.txt" ]; then
-            echo "📋 レポートプレビュー:"
-            echo "---"
-            head -30 "$LATEST_SESSION/analysis/summary_report.txt"
-            echo "---"
+        if python3 vol.2/scripts/analyze_results.py "$LATEST_SESSION"; then
+            # 成功した場合
+            echo ""
+            echo "========================================="
+            echo "✅ すべて完了！"
+            echo "========================================="
+            echo ""
+            echo "📁 結果ディレクトリ:"
+            echo "   $LATEST_SESSION"
+            echo ""
+            
+            # analysisディレクトリの確認
+            if [ -d "$LATEST_SESSION/analysis" ]; then
+                echo "📊 生成されたグラフ:"
+                ls -lh "$LATEST_SESSION/analysis/" 2>/dev/null | tail -n +2 || echo "   （ファイルリスト取得エラー）"
+                echo ""
+                echo "📄 レポート:"
+                echo "   $LATEST_SESSION/analysis/summary_report.txt"
+                echo ""
+                
+                # サマリーレポートの一部を表示
+                if [ -f "$LATEST_SESSION/analysis/summary_report.txt" ]; then
+                    echo "📋 レポートプレビュー:"
+                    echo "---"
+                    head -30 "$LATEST_SESSION/analysis/summary_report.txt"
+                    echo "---"
+                else
+                    echo "⚠️  summary_report.txt が見つかりません"
+                fi
+            else
+                echo "⚠️  analysisディレクトリが作成されませんでした"
+                echo "   パス: $LATEST_SESSION/analysis"
+            fi
+        else
+            # エラーが発生した場合
+            echo ""
+            echo "❌ グラフ生成に失敗しました"
+            echo ""
+            echo "トラブルシューティング:"
+            echo "  1. 必要なパッケージがインストールされているか確認:"
+            echo "     pip3 install matplotlib pandas seaborn"
+            echo ""
+            echo "  2. 手動でグラフを生成:"
+            echo "     python3 vol.2/scripts/analyze_results.py $LATEST_SESSION"
+            echo ""
+            echo "  3. Pythonのバージョンを確認:"
+            echo "     python3 --version"
+            echo ""
+            echo "データは保存されています:"
+            echo "   $LATEST_SESSION"
         fi
     else
         echo "⚠️  Python3が見つかりません"

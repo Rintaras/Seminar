@@ -307,41 +307,95 @@ def generate_summary_report(df, output_dir):
     print(f"Saved: {report_path}")
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python analyze_results.py <results_directory>")
+    try:
+        if len(sys.argv) < 2:
+            print("Usage: python analyze_results.py <results_directory>")
+            sys.exit(1)
+        
+        results_dir = sys.argv[1]
+        
+        if not os.path.exists(results_dir):
+            print(f"Error: Directory '{results_dir}' does not exist")
+            print(f"Current directory: {os.getcwd()}")
+            print(f"Looking for: {os.path.abspath(results_dir)}")
+            sys.exit(1)
+        
+        print("Loading benchmark results...")
+        df = load_results(results_dir)
+        
+        if df is None or len(df) == 0:
+            print("No data to analyze")
+            print(f"Checked directory: {results_dir}")
+            sys.exit(1)
+        
+        print(f"Loaded {len(df)} records")
+        print(f"Protocols: {df['Protocol'].unique()}")
+        print(f"Network conditions: {len(df.groupby(['NetworkDelay(ms)', 'Bandwidth']))} patterns")
+        
+        # グラフ出力ディレクトリ
+        output_dir = os.path.join(results_dir, 'analysis')
+        print(f"\nCreating output directory: {output_dir}")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # ディレクトリが作成されたか確認
+        if not os.path.exists(output_dir):
+            print(f"Error: Failed to create directory: {output_dir}")
+            sys.exit(1)
+        
+        print("\nGenerating analysis...")
+        try:
+            plot_ttfb_comparison(df, output_dir)
+        except Exception as e:
+            print(f"Warning: Failed to generate TTFB comparison: {e}")
+        
+        try:
+            plot_throughput_comparison(df, output_dir)
+        except Exception as e:
+            print(f"Warning: Failed to generate throughput comparison: {e}")
+        
+        try:
+            plot_heatmap(df, output_dir)
+        except Exception as e:
+            print(f"Warning: Failed to generate heatmap: {e}")
+        
+        try:
+            generate_summary_report(df, output_dir)
+        except Exception as e:
+            print(f"Warning: Failed to generate summary report: {e}")
+        
+        print("\n" + "=" * 80)
+        print("Analysis completed!")
+        print(f"Results saved to: {output_dir}")
+        
+        # 生成されたファイルを確認
+        if os.path.exists(output_dir):
+            files = os.listdir(output_dir)
+            if files:
+                print(f"Generated files: {', '.join(files)}")
+            else:
+                print("Warning: No files were generated")
+        
+        print("=" * 80)
+        
+    except Exception as e:
+        print("\n" + "=" * 80)
+        print("❌ ERROR: Analysis failed!")
+        print("=" * 80)
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print(f"\nCurrent directory: {os.getcwd()}")
+        if len(sys.argv) >= 2:
+            print(f"Target directory: {sys.argv[1]}")
+        print("\nTroubleshooting:")
+        print("  1. Check if the directory exists and contains CSV files")
+        print("  2. Ensure you have write permissions")
+        print("  3. Verify Python packages are installed:")
+        print("     pip3 install matplotlib pandas seaborn")
+        print("  4. Check available disk space")
+        print("\nFull error traceback:")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
-    
-    results_dir = sys.argv[1]
-    
-    if not os.path.exists(results_dir):
-        print(f"Error: Directory '{results_dir}' does not exist")
-        sys.exit(1)
-    
-    print("Loading benchmark results...")
-    df = load_results(results_dir)
-    
-    if df is None or len(df) == 0:
-        print("No data to analyze")
-        sys.exit(1)
-    
-    print(f"Loaded {len(df)} records")
-    print(f"Protocols: {df['Protocol'].unique()}")
-    print(f"Network conditions: {len(df.groupby(['NetworkDelay(ms)', 'Bandwidth']))} patterns")
-    
-    # グラフ出力ディレクトリ
-    output_dir = os.path.join(results_dir, 'analysis')
-    os.makedirs(output_dir, exist_ok=True)
-    
-    print("\nGenerating analysis...")
-    plot_ttfb_comparison(df, output_dir)
-    plot_throughput_comparison(df, output_dir)
-    plot_heatmap(df, output_dir)
-    generate_summary_report(df, output_dir)
-    
-    print("\n" + "=" * 80)
-    print("Analysis completed!")
-    print(f"Results saved to: {output_dir}")
-    print("=" * 80)
 
 if __name__ == '__main__':
     main()
