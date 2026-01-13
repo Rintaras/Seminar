@@ -150,6 +150,27 @@ auto_benchmark.bat
 
 **注意**: Windowsでは`.sh`ファイルをダブルクリックしても正しく実行されません。必ず上記の方法で実行してください。
 
+#### Windows: 結果の確認方法
+ベンチマーク実行後、結果を確認するには：
+
+**方法1: PowerShell スクリプト（推奨）**
+```powershell
+# PowerShellで実行（最も高機能）
+cd vol.2
+powershell -ExecutionPolicy Bypass -File view_results.ps1
+```
+
+**方法2: バッチファイル**
+```cmd
+cd vol.2
+view_results.bat
+```
+
+**方法3: エクスプローラーで直接開く**
+```
+vol.2\results\session_YYYYMMDD_HHMMSS_*\
+```
+
 ### 🚀 クイックテスト（最も簡単）
 
 サーバーが動いているか素早く確認：
