@@ -62,8 +62,20 @@ def plot_ttfb_comparison(df, output_dir):
     """TTFBの比較グラフ"""
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     
-    # 遅延による影響（帯域無制限の場合）
-    delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].mean().reset_index()
+    # データの特性を検出
+    unique_bandwidths = df['Bandwidth'].unique()
+    unique_delays = df['NetworkDelay(ms)'].unique()
+    
+    # 左側のグラフ: 遅延による影響
+    # 帯域幅が複数ある場合は無制限のみ、1種類の場合はそれを使用
+    if len(unique_bandwidths) > 1:
+        # 帯域無制限のデータ
+        delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].mean().reset_index()
+        bandwidth_label = "Unlimited Bandwidth"
+    else:
+        # 帯域が1種類のみの場合、そのデータを使用
+        delay_data = df.groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].mean().reset_index()
+        bandwidth_label = f"Bandwidth: {unique_bandwidths[0]}"
     
     for protocol in ['HTTP/2.0', 'HTTP/3.0']:
         protocol_data = delay_data[delay_data['Protocol'] == protocol]
@@ -73,36 +85,51 @@ def plot_ttfb_comparison(df, output_dir):
     
     axes[0].set_xlabel('Network Delay (ms)', fontsize=12)
     axes[0].set_ylabel('Average TTFB (ms)', fontsize=12)
-    axes[0].set_title('TTFB vs Network Delay (Unlimited Bandwidth)', fontsize=14, fontweight='bold')
+    axes[0].set_title(f'TTFB vs Network Delay ({bandwidth_label})', fontsize=14, fontweight='bold')
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # 帯域幅による影響（遅延0msの場合）
-    bandwidth_data = df[df['NetworkDelay(ms)'] == 0].copy()
-    # 帯域幅を数値に変換してソート（"0", "1mbit", "10mbit", "100mbit"）
-    bandwidth_order = ['100mbit', '10mbit', '1mbit', '0']
-    bandwidth_data['BandwidthOrder'] = bandwidth_data['Bandwidth'].apply(
-        lambda x: bandwidth_order.index(str(x)) if str(x) in bandwidth_order else 999
-    )
-    bandwidth_data = bandwidth_data.sort_values('BandwidthOrder')
+    # 右側のグラフ: 帯域幅または遅延による影響
+    if len(unique_bandwidths) > 1:
+        # 帯域幅が複数ある場合: 帯域幅による影響（遅延0msの場合）
+        bandwidth_data = df[df['NetworkDelay(ms)'] == 0].copy()
+        bandwidth_order = ['100mbit', '10mbit', '5mbit', '1mbit', '0']
+        bandwidth_data['BandwidthOrder'] = bandwidth_data['Bandwidth'].apply(
+            lambda x: bandwidth_order.index(str(x)) if str(x) in bandwidth_order else 999
+        )
+        bandwidth_data = bandwidth_data.sort_values('BandwidthOrder')
+        
+        bw_grouped = bandwidth_data.groupby(['Protocol', 'Bandwidth'])['TTFB(ms)'].mean().reset_index()
+        
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_data = bw_grouped[bw_grouped['Protocol'] == protocol]
+            if not protocol_data.empty:
+                axes[1].plot(range(len(protocol_data)), protocol_data['TTFB(ms)'], 
+                            marker='o', label=protocol, linewidth=2)
+        
+        if not bw_grouped.empty:
+            unique_bw = bw_grouped['Bandwidth'].unique()
+            axes[1].set_xticks(range(len(unique_bw)))
+            axes[1].set_xticklabels(unique_bw, rotation=45)
+        
+        axes[1].set_xlabel('Bandwidth Limit', fontsize=12)
+        axes[1].set_ylabel('Average TTFB (ms)', fontsize=12)
+        axes[1].set_title('TTFB vs Bandwidth (No Delay)', fontsize=14, fontweight='bold')
+    else:
+        # 帯域幅が1種類のみの場合: 遅延による詳細グラフ
+        delay_detail = df.groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].agg(['mean', 'std']).reset_index()
+        
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_data = delay_detail[delay_detail['Protocol'] == protocol]
+            if not protocol_data.empty:
+                axes[1].errorbar(protocol_data['NetworkDelay(ms)'], protocol_data['mean'], 
+                               yerr=protocol_data['std'], marker='o', label=protocol, 
+                               linewidth=2, capsize=5, alpha=0.7)
+        
+        axes[1].set_xlabel('Network Delay (ms)', fontsize=12)
+        axes[1].set_ylabel('Average TTFB (ms)', fontsize=12)
+        axes[1].set_title(f'TTFB with Error Bars ({unique_bandwidths[0]} bandwidth)', fontsize=14, fontweight='bold')
     
-    bw_grouped = bandwidth_data.groupby(['Protocol', 'Bandwidth'])['TTFB(ms)'].mean().reset_index()
-    
-    for protocol in ['HTTP/2.0', 'HTTP/3.0']:
-        protocol_data = bw_grouped[bw_grouped['Protocol'] == protocol]
-        if not protocol_data.empty:
-            axes[1].plot(range(len(protocol_data)), protocol_data['TTFB(ms)'], 
-                        marker='o', label=protocol, linewidth=2)
-    
-    # x軸のラベルを帯域幅の値に設定
-    if not bw_grouped.empty:
-        unique_bw = bw_grouped['Bandwidth'].unique()
-        axes[1].set_xticks(range(len(unique_bw)))
-        axes[1].set_xticklabels(unique_bw, rotation=45)
-    
-    axes[1].set_xlabel('Bandwidth Limit', fontsize=12)
-    axes[1].set_ylabel('Average TTFB (ms)', fontsize=12)
-    axes[1].set_title('TTFB vs Bandwidth (No Delay)', fontsize=14, fontweight='bold')
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
     
@@ -115,8 +142,19 @@ def plot_throughput_comparison(df, output_dir):
     """スループットの比較グラフ"""
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     
-    # 遅延による影響（帯域無制限の場合）
-    delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].mean().reset_index()
+    # データの特性を検出
+    unique_bandwidths = df['Bandwidth'].unique()
+    unique_delays = df['NetworkDelay(ms)'].unique()
+    
+    # 左側のグラフ: 遅延による影響
+    if len(unique_bandwidths) > 1:
+        # 帯域無制限のデータ
+        delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].mean().reset_index()
+        bandwidth_label = "Unlimited Bandwidth"
+    else:
+        # 帯域が1種類のみの場合
+        delay_data = df.groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].mean().reset_index()
+        bandwidth_label = f"Bandwidth: {unique_bandwidths[0]}"
     
     for protocol in ['HTTP/2.0', 'HTTP/3.0']:
         protocol_data = delay_data[delay_data['Protocol'] == protocol]
@@ -126,36 +164,51 @@ def plot_throughput_comparison(df, output_dir):
     
     axes[0].set_xlabel('Network Delay (ms)', fontsize=12)
     axes[0].set_ylabel('Average Throughput (KB/s)', fontsize=12)
-    axes[0].set_title('Throughput vs Network Delay (Unlimited Bandwidth)', fontsize=14, fontweight='bold')
+    axes[0].set_title(f'Throughput vs Network Delay ({bandwidth_label})', fontsize=14, fontweight='bold')
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # 帯域幅による影響（遅延0msの場合）
-    bandwidth_data = df[df['NetworkDelay(ms)'] == 0].copy()
-    # 帯域幅を数値に変換してソート
-    bandwidth_order = ['100mbit', '10mbit', '1mbit', '0']
-    bandwidth_data['BandwidthOrder'] = bandwidth_data['Bandwidth'].apply(
-        lambda x: bandwidth_order.index(str(x)) if str(x) in bandwidth_order else 999
-    )
-    bandwidth_data = bandwidth_data.sort_values('BandwidthOrder')
+    # 右側のグラフ: 帯域幅または遅延詳細
+    if len(unique_bandwidths) > 1:
+        # 帯域幅が複数ある場合: 帯域幅による影響（遅延0msの場合）
+        bandwidth_data = df[df['NetworkDelay(ms)'] == 0].copy()
+        bandwidth_order = ['100mbit', '10mbit', '5mbit', '1mbit', '0']
+        bandwidth_data['BandwidthOrder'] = bandwidth_data['Bandwidth'].apply(
+            lambda x: bandwidth_order.index(str(x)) if str(x) in bandwidth_order else 999
+        )
+        bandwidth_data = bandwidth_data.sort_values('BandwidthOrder')
+        
+        bw_grouped = bandwidth_data.groupby(['Protocol', 'Bandwidth'])['Throughput(KB/s)'].mean().reset_index()
+        
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_data = bw_grouped[bw_grouped['Protocol'] == protocol]
+            if not protocol_data.empty:
+                axes[1].plot(range(len(protocol_data)), protocol_data['Throughput(KB/s)'], 
+                            marker='o', label=protocol, linewidth=2)
+        
+        if not bw_grouped.empty:
+            unique_bw = bw_grouped['Bandwidth'].unique()
+            axes[1].set_xticks(range(len(unique_bw)))
+            axes[1].set_xticklabels(unique_bw, rotation=45)
+        
+        axes[1].set_xlabel('Bandwidth Limit', fontsize=12)
+        axes[1].set_ylabel('Average Throughput (KB/s)', fontsize=12)
+        axes[1].set_title('Throughput vs Bandwidth (No Delay)', fontsize=14, fontweight='bold')
+    else:
+        # 帯域幅が1種類のみの場合: 遅延による詳細グラフ（エラーバー付き）
+        delay_detail = df.groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].agg(['mean', 'std']).reset_index()
+        
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_data = delay_detail[delay_detail['Protocol'] == protocol]
+            if not protocol_data.empty:
+                axes[1].errorbar(protocol_data['NetworkDelay(ms)'], protocol_data['mean'], 
+                               yerr=protocol_data['std'], marker='o', label=protocol, 
+                               linewidth=2, capsize=5, alpha=0.7)
+        
+        axes[1].set_xlabel('Network Delay (ms)', fontsize=12)
+        axes[1].set_ylabel('Average Throughput (KB/s)', fontsize=12)
+        axes[1].set_title(f'Throughput with Error Bars ({unique_bandwidths[0]} bandwidth)', fontsize=14, fontweight='bold')
     
-    bw_grouped = bandwidth_data.groupby(['Protocol', 'Bandwidth'])['Throughput(KB/s)'].mean().reset_index()
-    
-    for protocol in ['HTTP/2.0', 'HTTP/3.0']:
-        protocol_data = bw_grouped[bw_grouped['Protocol'] == protocol]
-        if not protocol_data.empty:
-            axes[1].plot(range(len(protocol_data)), protocol_data['Throughput(KB/s)'], 
-                        marker='o', label=protocol, linewidth=2)
-    
-    # x軸のラベルを帯域幅の値に設定
-    if not bw_grouped.empty:
-        unique_bw = bw_grouped['Bandwidth'].unique()
-        axes[1].set_xticks(range(len(unique_bw)))
-        axes[1].set_xticklabels(unique_bw, rotation=45)
-    
-    axes[1].set_xlabel('Bandwidth Limit', fontsize=12)
-    axes[1].set_ylabel('Average Throughput (KB/s)', fontsize=12)
-    axes[1].set_title('Throughput vs Bandwidth (No Delay)', fontsize=14, fontweight='bold')
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
     
