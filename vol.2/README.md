@@ -171,7 +171,30 @@ view_results.bat
 vol.2\results\session_YYYYMMDD_HHMMSS_*\
 ```
 
-### 🚀 クイックテスト（最も簡単）
+### 🧪 動作確認テスト（推奨・最初に実行）
+
+ベンチマーク環境が正しくセットアップされているか確認：
+
+```bash
+cd vol.2
+
+# 環境チェック（Windows）
+check_setup.bat
+
+# または環境チェック（macOS/Linux/WSL）
+bash test_benchmark.sh
+```
+
+このテストスクリプトは：
+- ✅ Docker環境を確認
+- ✅ コンテナの起動状態を確認
+- ✅ 簡易ベンチマーク（5リクエスト）を実行
+- ✅ 結果ファイルが正しく保存されるか確認
+- ✅ 問題があれば診断とトラブルシューティングを提示
+
+**問題が見つかった場合は、まずこれを実行してください！**
+
+### 🚀 クイックテスト（サーバー接続確認）
 
 サーバーが動いているか素早く確認：
 
@@ -547,6 +570,61 @@ python3 vol.2/scripts/analyze_results.py vol.2/results/session_20260113_080000_c
 - Docker環境では`tc`コマンドで正確なネットワーク制御が可能
 
 ## 🐛 トラブルシューティング
+
+### ベンチマーク実行後にファイルが保存されない
+
+**問題**: ベンチマークを実行したが、`results`ディレクトリにファイルが作成されない
+
+**診断方法**:
+
+1. **環境診断スクリプトを実行**（最優先）
+   ```bash
+   # Windows
+   cd vol.2
+   debug_docker.bat
+   
+   # macOS/Linux/WSL
+   cd vol.2
+   bash test_benchmark.sh
+   ```
+
+2. **Docker コンテナの状態を確認**
+   ```bash
+   docker ps
+   # http2-server, http3-server, benchmark-client が起動しているか確認
+   ```
+
+3. **ボリュームマウントを確認**
+   ```bash
+   docker inspect benchmark-client | grep -A5 Mounts
+   # vol.2/results が /app/results にマウントされているか確認
+   ```
+
+4. **Docker内でファイルが作成されているか確認**
+   ```bash
+   docker exec benchmark-client ls -la /app/results/
+   ```
+
+**よくある原因と解決方法**:
+
+| 原因 | 解決方法 |
+|------|---------|
+| Docker Desktop が起動していない | Docker Desktop を起動して数分待つ |
+| コンテナが起動していない | `docker-compose up -d` を実行 |
+| ボリュームマウントが設定されていない | `docker-compose down -v && docker-compose up -d` |
+| 権限の問題（Linux/WSL） | `sudo chmod 777 results/` |
+| Windowsのパス問題 | WSLまたはGit Bashから実行 |
+| resultsディレクトリがない | `mkdir results` を実行 |
+
+**完全リセット** （最終手段）:
+```bash
+cd vol.2
+docker-compose down -v
+docker system prune -f
+docker-compose build --no-cache
+docker-compose up -d
+bash test_benchmark.sh
+```
 
 ### Windows: バッチファイル（.bat）をダブルクリックしてもすぐ閉じる
 
