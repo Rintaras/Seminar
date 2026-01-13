@@ -22,34 +22,68 @@ const (
 
 // getCertDir は証明書ディレクトリのパスを返す
 func getCertDir() (string, error) {
-	// 実行ファイルのディレクトリを取得
-	ex, err := os.Executable()
+	// 1. Docker環境のチェック (/app/cert)
+	dockerCertDir := "/app/cert"
+	if info, err := os.Stat(dockerCertDir); err == nil && info.IsDir() {
+		log.Printf("Found cert directory (Docker): %s", dockerCertDir)
+		return dockerCertDir, nil
+	}
+
+	// 2. カレントディレクトリがcertディレクトリ自体かチェック
+	if _, err := os.Stat("cert.go"); err == nil {
+		return ".", nil
+	}
+
+	// 3. カレントディレクトリから上位に遡って vol.2/cert を探す
+	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("failed to get executable path: %w", err)
-	}
-	exDir := filepath.Dir(ex)
-
-	// vol.2/certを探す
-	certDir := filepath.Join(exDir, "..", "..", "cert")
-	if _, err := os.Stat(certDir); err == nil {
-		return certDir, nil
+		return "", fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	// カレントディレクトリから探す
-	certDir = filepath.Join("vol.2", "cert")
-	if _, err := os.Stat(certDir); err == nil {
-		return certDir, nil
+	// カレントディレクトリから最大5階層上まで探す
+	dir := cwd
+	for i := 0; i < 5; i++ {
+		// vol.2/cert を試す
+		certDir := filepath.Join(dir, "vol.2", "cert")
+		if info, err := os.Stat(certDir); err == nil && info.IsDir() {
+			// cert.go が存在することを確認
+			if _, err := os.Stat(filepath.Join(certDir, "cert.go")); err == nil {
+				log.Printf("Found cert directory: %s", certDir)
+				return certDir, nil
+			}
+		}
+
+		// cert ディレクトリ (vol.2直下で実行された場合)
+		certDir = filepath.Join(dir, "cert")
+		if info, err := os.Stat(certDir); err == nil && info.IsDir() {
+			if _, err := os.Stat(filepath.Join(certDir, "cert.go")); err == nil {
+				log.Printf("Found cert directory: %s", certDir)
+				return certDir, nil
+			}
+		}
+
+		// 一つ上のディレクトリへ
+		parentDir := filepath.Dir(dir)
+		if parentDir == dir {
+			// ルートディレクトリに到達
+			break
+		}
+		dir = parentDir
 	}
 
-	// カレントディレクトリがcertディレクトリかチェック
-	if info, err := os.Stat("."); err == nil && info.IsDir() {
-		if _, err := os.Stat("cert.go"); err == nil {
-			return ".", nil
+	// 4. go run で一時ディレクトリから実行される場合のフォールバック
+	// 実行ファイルのディレクトリから探す
+	ex, err := os.Executable()
+	if err == nil {
+		exDir := filepath.Dir(ex)
+		certDir := filepath.Join(exDir, "..", "..", "cert")
+		if info, err := os.Stat(certDir); err == nil && info.IsDir() {
+			log.Printf("Found cert directory via executable: %s", certDir)
+			return certDir, nil
 		}
 	}
 
-	// デフォルト（存在しなくても返す）
-	return certDir, nil
+	return "", fmt.Errorf("could not find cert directory")
 }
 
 // getCertPath は証明書ファイルのパスを返す（内部使用）
@@ -100,6 +134,12 @@ func LoadOrGenerateCert() (tls.Certificate, error) {
 
 // generateAndSaveCert は証明書を生成してファイルに保存する
 func generateAndSaveCert(certPath, keyPath string) (tls.Certificate, error) {
+	// 証明書ディレクトリを作成
+	certDir := filepath.Dir(certPath)
+	if err := os.MkdirAll(certDir, 0755); err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to create cert directory %s: %w", certDir, err)
+	}
+
 	// 秘密鍵生成
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

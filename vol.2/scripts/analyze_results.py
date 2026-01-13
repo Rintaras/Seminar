@@ -16,14 +16,28 @@ plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 def load_results(results_dir):
-    """結果ファイルを読み込む"""
-    http2_files = glob.glob(os.path.join(results_dir, 'http2_*.csv'))
-    http3_files = glob.glob(os.path.join(results_dir, 'http3_*.csv'))
+    """結果ファイルを読み込む（セッションディレクトリ構造対応）"""
+    # 新しい構造: session_XXX/experiment_name/http2_results.csv
+    http2_files = glob.glob(os.path.join(results_dir, '*/http2_results.csv'))
+    http3_files = glob.glob(os.path.join(results_dir, '*/http3_results.csv'))
+    
+    # 旧構造も探す: http2_*.csv
+    if not http2_files:
+        http2_files = glob.glob(os.path.join(results_dir, 'http2_*.csv'))
+    if not http3_files:
+        http3_files = glob.glob(os.path.join(results_dir, 'http3_*.csv'))
     
     dfs = []
     for file in http2_files + http3_files:
-        df = pd.read_csv(file)
-        dfs.append(df)
+        try:
+            df = pd.read_csv(file)
+            # ファイル名から実験名を抽出（オプション）
+            exp_name = os.path.basename(os.path.dirname(file))
+            if exp_name and exp_name != results_dir:
+                df['Experiment'] = exp_name
+            dfs.append(df)
+        except Exception as e:
+            print(f"Warning: Failed to load {file}: {e}")
     
     if not dfs:
         print("No result files found!")
@@ -34,7 +48,7 @@ def load_results(results_dir):
 def analyze_by_condition(df):
     """ネットワーク条件別に分析"""
     # 条件でグループ化
-    grouped = df.groupby(['Protocol', 'NetworkDelay(ms)', 'NetworkLoss(%)'])
+    grouped = df.groupby(['Protocol', 'NetworkDelay(ms)', 'Bandwidth'])
     
     stats = grouped.agg({
         'TTFB(ms)': ['mean', 'std', 'min', 'max'],
@@ -48,31 +62,47 @@ def plot_ttfb_comparison(df, output_dir):
     """TTFBの比較グラフ"""
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     
-    # 遅延による影響
-    delay_data = df[df['NetworkLoss(%)'] == 0].groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].mean().reset_index()
+    # 遅延による影響（帯域無制限の場合）
+    delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].mean().reset_index()
     
     for protocol in ['HTTP/2.0', 'HTTP/3.0']:
         protocol_data = delay_data[delay_data['Protocol'] == protocol]
-        axes[0].plot(protocol_data['NetworkDelay(ms)'], protocol_data['TTFB(ms)'], 
-                    marker='o', label=protocol, linewidth=2)
+        if not protocol_data.empty:
+            axes[0].plot(protocol_data['NetworkDelay(ms)'], protocol_data['TTFB(ms)'], 
+                        marker='o', label=protocol, linewidth=2)
     
     axes[0].set_xlabel('Network Delay (ms)', fontsize=12)
     axes[0].set_ylabel('Average TTFB (ms)', fontsize=12)
-    axes[0].set_title('TTFB vs Network Delay', fontsize=14, fontweight='bold')
+    axes[0].set_title('TTFB vs Network Delay (Unlimited Bandwidth)', fontsize=14, fontweight='bold')
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # パケット損失による影響
-    loss_data = df[df['NetworkDelay(ms)'] == 0].groupby(['Protocol', 'NetworkLoss(%)'])['TTFB(ms)'].mean().reset_index()
+    # 帯域幅による影響（遅延0msの場合）
+    bandwidth_data = df[df['NetworkDelay(ms)'] == 0].copy()
+    # 帯域幅を数値に変換してソート（"0", "1mbit", "10mbit", "100mbit"）
+    bandwidth_order = ['100mbit', '10mbit', '1mbit', '0']
+    bandwidth_data['BandwidthOrder'] = bandwidth_data['Bandwidth'].apply(
+        lambda x: bandwidth_order.index(str(x)) if str(x) in bandwidth_order else 999
+    )
+    bandwidth_data = bandwidth_data.sort_values('BandwidthOrder')
+    
+    bw_grouped = bandwidth_data.groupby(['Protocol', 'Bandwidth'])['TTFB(ms)'].mean().reset_index()
     
     for protocol in ['HTTP/2.0', 'HTTP/3.0']:
-        protocol_data = loss_data[loss_data['Protocol'] == protocol]
-        axes[1].plot(protocol_data['NetworkLoss(%)'], protocol_data['TTFB(ms)'], 
-                    marker='o', label=protocol, linewidth=2)
+        protocol_data = bw_grouped[bw_grouped['Protocol'] == protocol]
+        if not protocol_data.empty:
+            axes[1].plot(range(len(protocol_data)), protocol_data['TTFB(ms)'], 
+                        marker='o', label=protocol, linewidth=2)
     
-    axes[1].set_xlabel('Packet Loss Rate (%)', fontsize=12)
+    # x軸のラベルを帯域幅の値に設定
+    if not bw_grouped.empty:
+        unique_bw = bw_grouped['Bandwidth'].unique()
+        axes[1].set_xticks(range(len(unique_bw)))
+        axes[1].set_xticklabels(unique_bw, rotation=45)
+    
+    axes[1].set_xlabel('Bandwidth Limit', fontsize=12)
     axes[1].set_ylabel('Average TTFB (ms)', fontsize=12)
-    axes[1].set_title('TTFB vs Packet Loss', fontsize=14, fontweight='bold')
+    axes[1].set_title('TTFB vs Bandwidth (No Delay)', fontsize=14, fontweight='bold')
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
     
@@ -85,31 +115,47 @@ def plot_throughput_comparison(df, output_dir):
     """スループットの比較グラフ"""
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     
-    # 遅延による影響
-    delay_data = df[df['NetworkLoss(%)'] == 0].groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].mean().reset_index()
+    # 遅延による影響（帯域無制限の場合）
+    delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].mean().reset_index()
     
     for protocol in ['HTTP/2.0', 'HTTP/3.0']:
         protocol_data = delay_data[delay_data['Protocol'] == protocol]
-        axes[0].plot(protocol_data['NetworkDelay(ms)'], protocol_data['Throughput(KB/s)'], 
-                    marker='o', label=protocol, linewidth=2)
+        if not protocol_data.empty:
+            axes[0].plot(protocol_data['NetworkDelay(ms)'], protocol_data['Throughput(KB/s)'], 
+                        marker='o', label=protocol, linewidth=2)
     
     axes[0].set_xlabel('Network Delay (ms)', fontsize=12)
     axes[0].set_ylabel('Average Throughput (KB/s)', fontsize=12)
-    axes[0].set_title('Throughput vs Network Delay', fontsize=14, fontweight='bold')
+    axes[0].set_title('Throughput vs Network Delay (Unlimited Bandwidth)', fontsize=14, fontweight='bold')
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
     
-    # パケット損失による影響
-    loss_data = df[df['NetworkDelay(ms)'] == 0].groupby(['Protocol', 'NetworkLoss(%)'])['Throughput(KB/s)'].mean().reset_index()
+    # 帯域幅による影響（遅延0msの場合）
+    bandwidth_data = df[df['NetworkDelay(ms)'] == 0].copy()
+    # 帯域幅を数値に変換してソート
+    bandwidth_order = ['100mbit', '10mbit', '1mbit', '0']
+    bandwidth_data['BandwidthOrder'] = bandwidth_data['Bandwidth'].apply(
+        lambda x: bandwidth_order.index(str(x)) if str(x) in bandwidth_order else 999
+    )
+    bandwidth_data = bandwidth_data.sort_values('BandwidthOrder')
+    
+    bw_grouped = bandwidth_data.groupby(['Protocol', 'Bandwidth'])['Throughput(KB/s)'].mean().reset_index()
     
     for protocol in ['HTTP/2.0', 'HTTP/3.0']:
-        protocol_data = loss_data[loss_data['Protocol'] == protocol]
-        axes[1].plot(protocol_data['NetworkLoss(%)'], protocol_data['Throughput(KB/s)'], 
-                    marker='o', label=protocol, linewidth=2)
+        protocol_data = bw_grouped[bw_grouped['Protocol'] == protocol]
+        if not protocol_data.empty:
+            axes[1].plot(range(len(protocol_data)), protocol_data['Throughput(KB/s)'], 
+                        marker='o', label=protocol, linewidth=2)
     
-    axes[1].set_xlabel('Packet Loss Rate (%)', fontsize=12)
+    # x軸のラベルを帯域幅の値に設定
+    if not bw_grouped.empty:
+        unique_bw = bw_grouped['Bandwidth'].unique()
+        axes[1].set_xticks(range(len(unique_bw)))
+        axes[1].set_xticklabels(unique_bw, rotation=45)
+    
+    axes[1].set_xlabel('Bandwidth Limit', fontsize=12)
     axes[1].set_ylabel('Average Throughput (KB/s)', fontsize=12)
-    axes[1].set_title('Throughput vs Packet Loss', fontsize=14, fontweight='bold')
+    axes[1].set_title('Throughput vs Bandwidth (No Delay)', fontsize=14, fontweight='bold')
     axes[1].legend()
     axes[1].grid(True, alpha=0.3)
     
@@ -124,18 +170,22 @@ def plot_heatmap(df, output_dir):
     
     for idx, protocol in enumerate(['HTTP/2.0', 'HTTP/3.0']):
         protocol_data = df[df['Protocol'] == protocol]
-        pivot = protocol_data.pivot_table(
-            values='TTFB(ms)', 
-            index='NetworkDelay(ms)', 
-            columns='NetworkLoss(%)', 
-            aggfunc='mean'
-        )
-        
-        sns.heatmap(pivot, annot=True, fmt='.1f', cmap='YlOrRd', ax=axes[idx], 
-                   cbar_kws={'label': 'TTFB (ms)'})
-        axes[idx].set_title(f'{protocol} - TTFB Heatmap', fontsize=14, fontweight='bold')
-        axes[idx].set_xlabel('Packet Loss Rate (%)', fontsize=12)
-        axes[idx].set_ylabel('Network Delay (ms)', fontsize=12)
+        if not protocol_data.empty:
+            pivot = protocol_data.pivot_table(
+                values='TTFB(ms)', 
+                index='NetworkDelay(ms)', 
+                columns='Bandwidth', 
+                aggfunc='mean'
+            )
+            
+            sns.heatmap(pivot, annot=True, fmt='.1f', cmap='YlOrRd', ax=axes[idx], 
+                       cbar_kws={'label': 'TTFB (ms)'})
+            axes[idx].set_title(f'{protocol} - TTFB Heatmap', fontsize=14, fontweight='bold')
+            axes[idx].set_xlabel('Bandwidth Limit', fontsize=12)
+            axes[idx].set_ylabel('Network Delay (ms)', fontsize=12)
+        else:
+            axes[idx].text(0.5, 0.5, f'No data for {protocol}', 
+                          ha='center', va='center', fontsize=14)
     
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'ttfb_heatmap.png'), dpi=300, bbox_inches='tight')
@@ -171,7 +221,7 @@ def generate_summary_report(df, output_dir):
         for _, row in stats.iterrows():
             f.write(f"\nProtocol: {row['Protocol']}, ")
             f.write(f"Delay: {row['NetworkDelay(ms)']}ms, ")
-            f.write(f"Loss: {row['NetworkLoss(%)']}%\n")
+            f.write(f"Bandwidth: {row['Bandwidth']}\n")
             f.write(f"  TTFB: {row[('TTFB(ms)', 'mean')]:.3f} ± {row[('TTFB(ms)', 'std')]:.3f} ms\n")
             f.write(f"  Total Time: {row[('TotalTime(ms)', 'mean')]:.3f} ± {row[('TotalTime(ms)', 'std')]:.3f} ms\n")
             f.write(f"  Throughput: {row[('Throughput(KB/s)', 'mean')]:.2f} ± {row[('Throughput(KB/s)', 'std')]:.2f} KB/s\n")
@@ -181,19 +231,22 @@ def generate_summary_report(df, output_dir):
         f.write("Winner Analysis:\n")
         f.write("=" * 80 + "\n")
         
-        for delay in df['NetworkDelay(ms)'].unique():
-            for loss in df['NetworkLoss(%)'].unique():
-                condition_data = df[(df['NetworkDelay(ms)'] == delay) & (df['NetworkLoss(%)'] == loss)]
+        for delay in sorted(df['NetworkDelay(ms)'].unique()):
+            for bandwidth in df['Bandwidth'].unique():
+                condition_data = df[(df['NetworkDelay(ms)'] == delay) & (df['Bandwidth'] == bandwidth)]
                 if len(condition_data) == 0:
                     continue
                 
                 http2_ttfb = condition_data[condition_data['Protocol'] == 'HTTP/2.0']['TTFB(ms)'].mean()
                 http3_ttfb = condition_data[condition_data['Protocol'] == 'HTTP/3.0']['TTFB(ms)'].mean()
                 
+                if pd.isna(http2_ttfb) or pd.isna(http3_ttfb):
+                    continue
+                
                 winner = 'HTTP/2.0' if http2_ttfb < http3_ttfb else 'HTTP/3.0'
                 diff_pct = abs(http2_ttfb - http3_ttfb) / min(http2_ttfb, http3_ttfb) * 100
                 
-                f.write(f"\nDelay: {delay}ms, Loss: {loss}%\n")
+                f.write(f"\nDelay: {delay}ms, Bandwidth: {bandwidth}\n")
                 f.write(f"  Winner: {winner} (by {diff_pct:.1f}%)\n")
                 f.write(f"  HTTP/2 TTFB: {http2_ttfb:.3f} ms\n")
                 f.write(f"  HTTP/3 TTFB: {http3_ttfb:.3f} ms\n")
@@ -220,7 +273,7 @@ def main():
     
     print(f"Loaded {len(df)} records")
     print(f"Protocols: {df['Protocol'].unique()}")
-    print(f"Network conditions: {len(df.groupby(['NetworkDelay(ms)', 'NetworkLoss(%)']))} patterns")
+    print(f"Network conditions: {len(df.groupby(['NetworkDelay(ms)', 'Bandwidth']))} patterns")
     
     # グラフ出力ディレクトリ
     output_dir = os.path.join(results_dir, 'analysis')

@@ -3,7 +3,7 @@ module seminar
 go 1.24.0
 
 require (
-	github.com/quic-go/quic-go v0.58.0
+	github.com/quic-go/quic-go v0.59.0
 	golang.org/x/net v0.48.0
 )
 

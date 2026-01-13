@@ -10,15 +10,15 @@ import (
 
 // Metrics は性能計測結果を保持する
 type Metrics struct {
-	Protocol       string        // HTTP/2 or HTTP/3
-	RequestTime    time.Time     // リクエスト開始時刻
-	TTFB           time.Duration // Time To First Byte
-	TotalTime      time.Duration // 全体の転送時間
-	BytesReceived  int64         // 受信バイト数
-	StatusCode     int           // HTTPステータスコード
-	Error          error         // エラー（あれば）
-	NetworkDelay   int           // 遅延設定 (ms)
-	NetworkLoss    float64       // パケット損失率 (%)
+	Protocol      string        // HTTP/2 or HTTP/3
+	RequestTime   time.Time     // リクエスト開始時刻
+	TTFB          time.Duration // Time To First Byte
+	TotalTime     time.Duration // 全体の転送時間
+	BytesReceived int64         // 受信バイト数
+	StatusCode    int           // HTTPステータスコード
+	Error         error         // エラー（あれば）
+	NetworkDelay  int           // 遅延設定 (ms)
+	Bandwidth     string        // 帯域幅制限 (e.g., 1mbit, 10mbit)
 }
 
 // MetricsCollector は計測結果を収集する
@@ -37,7 +37,7 @@ func NewMetricsCollector(filename string) (*MetricsCollector, error) {
 	}
 
 	writer := csv.NewWriter(file)
-	
+
 	// CSVヘッダーを書き込む
 	header := []string{
 		"Protocol",
@@ -48,7 +48,7 @@ func NewMetricsCollector(filename string) (*MetricsCollector, error) {
 		"StatusCode",
 		"Error",
 		"NetworkDelay(ms)",
-		"NetworkLoss(%)",
+		"Bandwidth",
 		"Throughput(KB/s)",
 	}
 	if err := writer.Write(header); err != nil {
@@ -91,7 +91,7 @@ func (mc *MetricsCollector) Record(m Metrics) error {
 		fmt.Sprintf("%d", m.StatusCode),
 		errStr,
 		fmt.Sprintf("%d", m.NetworkDelay),
-		fmt.Sprintf("%.2f", m.NetworkLoss),
+		m.Bandwidth,
 		fmt.Sprintf("%.2f", throughput),
 	}
 
@@ -133,12 +133,12 @@ func (mc *MetricsCollector) Summary() {
 
 	// プロトコル別に集計
 	stats := make(map[string]*struct {
-		count       int
-		totalTTFB   time.Duration
-		totalTime   time.Duration
-		totalBytes  int64
-		minTTFB     time.Duration
-		maxTTFB     time.Duration
+		count        int
+		totalTTFB    time.Duration
+		totalTime    time.Duration
+		totalBytes   int64
+		minTTFB      time.Duration
+		maxTTFB      time.Duration
 		minTotalTime time.Duration
 		maxTotalTime time.Duration
 	})
@@ -146,17 +146,17 @@ func (mc *MetricsCollector) Summary() {
 	for _, m := range mc.metrics {
 		if _, ok := stats[m.Protocol]; !ok {
 			stats[m.Protocol] = &struct {
-				count       int
-				totalTTFB   time.Duration
-				totalTime   time.Duration
-				totalBytes  int64
-				minTTFB     time.Duration
-				maxTTFB     time.Duration
+				count        int
+				totalTTFB    time.Duration
+				totalTime    time.Duration
+				totalBytes   int64
+				minTTFB      time.Duration
+				maxTTFB      time.Duration
 				minTotalTime time.Duration
 				maxTotalTime time.Duration
 			}{
-				minTTFB:     m.TTFB,
-				maxTTFB:     m.TTFB,
+				minTTFB:      m.TTFB,
+				maxTTFB:      m.TTFB,
 				minTotalTime: m.TotalTime,
 				maxTotalTime: m.TotalTime,
 			}
@@ -203,4 +203,3 @@ func (mc *MetricsCollector) Summary() {
 	}
 	fmt.Println("==========================================\n")
 }
-

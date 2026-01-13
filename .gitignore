@@ -30,10 +30,9 @@ vol.2/cert/*.key
 # Cursor IDE
 .cursor/
 
-# 実験結果
-vol.2/results/*.csv
-vol.2/results/analysis/*.png
-vol.2/results/analysis/*.txt
+# 実験結果（サンプルを除く）
+vol.2/results/*/
+!vol.2/results/.gitkeep
 
 # Docker
 # (keep .dockerignore in repository)

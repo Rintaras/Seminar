@@ -10,16 +10,17 @@ import (
 	"net/http/httptrace"
 	"time"
 
-	"golang.org/x/net/http2"
 	"seminar/vol.2/benchmark"
+
+	"golang.org/x/net/http2"
 )
 
 var (
-	serverURL     = flag.String("url", "https://localhost:2000/", "Server URL")
-	numRequests   = flag.Int("n", 100, "Number of requests")
-	outputFile    = flag.String("o", "http2_results.csv", "Output CSV file")
-	networkDelay  = flag.Int("delay", 0, "Network delay (ms)")
-	networkLoss   = flag.Float64("loss", 0.0, "Packet loss rate (%)")
+	serverURL    = flag.String("url", "https://localhost:2000/", "Server URL")
+	numRequests  = flag.Int("n", 100, "Number of requests")
+	outputFile   = flag.String("o", "http2_results.csv", "Output CSV file")
+	networkDelay = flag.Int("delay", 0, "Network delay (ms)")
+	bandwidth    = flag.String("bandwidth", "0", "Bandwidth limit (e.g., 1mbit, 10mbit, 100mbit)")
 )
 
 func main() {
@@ -47,13 +48,13 @@ func main() {
 	fmt.Printf("Target: %s\n", *serverURL)
 	fmt.Printf("Requests: %d\n", *numRequests)
 	fmt.Printf("Network Delay: %d ms\n", *networkDelay)
-	fmt.Printf("Network Loss: %.2f%%\n\n", *networkLoss)
+	fmt.Printf("Bandwidth Limit: %s\n\n", *bandwidth)
 
 	// 計測実行
 	for i := 0; i < *numRequests; i++ {
 		metrics := measureRequest(client, *serverURL)
 		metrics.NetworkDelay = *networkDelay
-		metrics.NetworkLoss = *networkLoss
+		metrics.Bandwidth = *bandwidth
 
 		if err := collector.Record(metrics); err != nil {
 			log.Printf("Failed to record metrics: %v", err)
@@ -119,4 +120,3 @@ func measureRequest(client *http.Client, url string) benchmark.Metrics {
 
 	return metrics
 }
-

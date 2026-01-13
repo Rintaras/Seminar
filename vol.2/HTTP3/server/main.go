@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-
 	"seminar/vol.2/cert"
 
 	"github.com/quic-go/quic-go/http3"
