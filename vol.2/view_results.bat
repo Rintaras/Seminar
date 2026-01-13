@@ -1,15 +1,44 @@
 @echo off
 REM ベンチマーク結果確認スクリプト (Windows用)
 
+REM エラー発生時も続行してメッセージを表示
 setlocal enabledelayedexpansion
 
 echo =========================================
 echo 📊 ベンチマーク結果確認
 echo =========================================
 echo.
+echo デバッグ情報:
+echo - 現在のディレクトリ: %CD%
+echo - スクリプトの場所: %~dp0
+echo.
 
 set SCRIPT_DIR=%~dp0
 cd /d "%SCRIPT_DIR%"
+
+echo スクリプトディレクトリに移動しました: %CD%
+echo.
+
+REM resultsディレクトリの存在確認
+if not exist "results\" (
+    echo ❌ エラー: resultsディレクトリが見つかりません
+    echo.
+    echo 現在のディレクトリ: %CD%
+    echo.
+    echo 以下を確認してください:
+    echo   1. vol.2 ディレクトリにいるか確認
+    echo   2. まず auto_benchmark.bat を実行してください
+    echo.
+    echo 手動で確認する場合:
+    echo   cd /d "%~dp0"
+    echo   dir results
+    echo.
+    pause
+    exit /b 1
+)
+
+echo resultsディレクトリが見つかりました
+echo.
 
 REM 最新のセッションを探す
 set LATEST_SESSION=
@@ -18,7 +47,10 @@ for /f "delims=" %%i in ('dir /b /ad /o-d results\session_* 2^>nul') do (
 )
 
 if "%LATEST_SESSION%"=="" (
-    echo ❌ エラー: 結果ディレクトリが見つかりません
+    echo ❌ エラー: セッションディレクトリが見つかりません
+    echo.
+    echo resultsディレクトリ内のフォルダ:
+    dir /b results
     echo.
     echo まず、auto_benchmark.bat を実行してください。
     echo.

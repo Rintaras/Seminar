@@ -548,7 +548,46 @@ python3 vol.2/scripts/analyze_results.py vol.2/results/session_20260113_080000_c
 
 ## 🐛 トラブルシューティング
 
-### Windows: スクリプトをダブルクリックしてもすぐ終了する
+### Windows: バッチファイル（.bat）をダブルクリックしてもすぐ閉じる
+
+**問題**: `.bat`ファイルをダブルクリックすると、ウィンドウが開いてすぐ閉じる
+
+**原因**: エラーが発生しているが、メッセージが表示される前にウィンドウが閉じる
+
+**解決方法（推奨順）**:
+
+1. **コマンドプロンプトから実行** - 最も確実
+   ```cmd
+   # Win+R を押して「cmd」と入力
+   cd /d "C:\Users\[ユーザー名]\Documents\Research\Seminar\vol.2"
+   
+   # 環境チェック（推奨）
+   check_setup.bat
+   
+   # ベンチマーク実行
+   bash auto_benchmark.sh
+   
+   # 結果確認
+   view_results.bat
+   ```
+
+2. **PowerShellから実行**
+   ```powershell
+   cd "C:\Users\[ユーザー名]\Documents\Research\Seminar\vol.2"
+   bash auto_benchmark.sh
+   powershell -ExecutionPolicy Bypass -File view_results.ps1
+   ```
+
+3. **環境チェックスクリプトを実行**
+   ```cmd
+   # vol.2ディレクトリで右クリック → ターミナルで開く
+   check_setup.bat
+   ```
+   このスクリプトが、Docker、WSL、ディレクトリ構造などをチェックして問題を診断します。
+
+📄 **詳細は `WINDOWS_README.txt` を参照してください**
+
+### Windows: スクリプトをダブルクリックしてもすぐ終了する（.sh）
 
 **問題**: `.sh`ファイルをWindowsでダブルクリックすると、ウィンドウが開いてすぐ閉じる
 
