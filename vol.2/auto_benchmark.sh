@@ -3,7 +3,9 @@
 
 set -e
 
-cd /Users/root1/Documents/Research/Seminar/vol.2
+# スクリプトのディレクトリを取得（macOS/Linux/WSL対応）
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
 
 echo "========================================="
 echo "🚀 完全自動テスト開始"
@@ -79,7 +81,8 @@ echo "========================================="
 echo "📈 Step 3: グラフ生成"
 echo "========================================="
 
-cd /Users/root1/Documents/Research/Seminar
+# プロジェクトルートに移動
+cd "$SCRIPT_DIR/.."
 
 # セッションディレクトリのパスを構築
 LATEST_SESSION="vol.2/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}"

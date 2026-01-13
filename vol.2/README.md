@@ -116,6 +116,40 @@ go get golang.org/x/net/http2
 
 **注意**: `go build`ではなく`go run`を使用してください。バイナリファイルが生成されず、ディレクトリが見やすくなります。
 
+### 💻 プラットフォーム別の実行方法
+
+#### macOS / Linux
+シェルスクリプト（`.sh`）をそのまま実行できます：
+```bash
+cd vol.2
+./auto_benchmark.sh
+```
+
+#### Windows
+以下のいずれかの方法で実行してください：
+
+**方法1: WSL (Windows Subsystem for Linux) を使用 - 推奨**
+```bash
+# WSLを開いて実行
+cd vol.2
+bash auto_benchmark.sh
+```
+
+**方法2: Git Bash を使用**
+```bash
+# Git Bashを開いて実行
+cd vol.2
+bash auto_benchmark.sh
+```
+
+**方法3: Windowsバッチファイル（WSL必須）**
+```cmd
+cd vol.2
+auto_benchmark.bat
+```
+
+**注意**: Windowsでは`.sh`ファイルをダブルクリックしても正しく実行されません。必ず上記の方法で実行してください。
+
 ### 🚀 クイックテスト（最も簡単）
 
 サーバーが動いているか素早く確認：
@@ -490,6 +524,83 @@ python3 vol.2/scripts/analyze_results.py vol.2/results/session_20260113_080000_c
 - 証明書は両サーバーで共有
 - `go run`を推奨（`go build`するとバイナリが生成される）
 - Docker環境では`tc`コマンドで正確なネットワーク制御が可能
+
+## 🐛 トラブルシューティング
+
+### Windows: スクリプトをダブルクリックしてもすぐ終了する
+
+**問題**: `.sh`ファイルをWindowsでダブルクリックすると、ウィンドウが開いてすぐ閉じる
+
+**原因**: シェルスクリプト（`.sh`）はWindowsでは直接実行できません
+
+**解決方法**:
+1. **WSL (Windows Subsystem for Linux) を使用** - 推奨
+   ```bash
+   # PowerShellまたはコマンドプロンプトで
+   wsl
+   cd /mnt/c/Users/[あなたのユーザー名]/Documents/Research/Seminar/vol.2
+   bash auto_benchmark.sh
+   ```
+
+2. **Git Bash を使用**
+   ```bash
+   # Git Bashを開いて
+   cd vol.2
+   bash auto_benchmark.sh
+   ```
+
+3. **Windowsバッチファイルを使用**（WSL必須）
+   ```cmd
+   cd vol.2
+   auto_benchmark.bat
+   ```
+
+### Docker: ポートが既に使用されている
+
+**問題**: `bind: address already in use`エラー
+
+**解決方法**:
+```bash
+# 既存のコンテナを停止
+docker-compose down -v
+
+# プロセスを確認して停止
+# macOS/Linux:
+lsof -ti:2000,3000 | xargs kill -9
+
+# Windows (PowerShell):
+Get-NetTCPConnection -LocalPort 2000,3000 | Select-Object -ExpandProperty OwningProcess | ForEach-Object {Stop-Process -Id $_ -Force}
+```
+
+### Python: グラフが生成されない
+
+**問題**: `python3: command not found`または`ModuleNotFoundError`
+
+**解決方法**:
+```bash
+# Python3をインストール
+# macOS:
+brew install python3
+
+# Ubuntu/WSL:
+sudo apt update && sudo apt install python3 python3-pip
+
+# パッケージをインストール
+pip3 install matplotlib pandas seaborn
+```
+
+### Docker: イメージのビルドに失敗する
+
+**問題**: Goバージョンエラーや依存関係エラー
+
+**解決方法**:
+```bash
+# クリーンビルド
+docker-compose down -v
+docker system prune -a  # 注意: 全てのDockerイメージを削除
+docker-compose build --no-cache
+docker-compose up -d
+```
 
 ## 参考資料
 
