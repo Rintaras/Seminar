@@ -2,6 +2,28 @@
 
 HTTP/1.1、HTTP/2、HTTP/3の実装例とGoプログラミングの学習プロジェクトです。
 
+## 📥 クローン方法
+
+```bash
+# リポジトリをクローン
+git clone https://github.com/Rintaras/Seminar.git
+cd Seminar
+
+# 依存関係のインストール
+go mod download
+```
+
+## 🎯 推奨：Vol.2 - 性能比較研究
+
+**HTTP/2とHTTP/3の詳細な性能比較実験**を行いたい場合は、`vol.2/`ディレクトリをご利用ください：
+
+- 📊 5ms間隔の詳細遅延測定（0-100ms）
+- 🎯 性能逆転ポイントの特定（10-15ms境界）
+- 🐳 Docker環境での自動実験
+- 📈 自動グラフ生成とレポート作成
+
+詳細は **[`vol.2/README.md`](./vol.2/README.md)** をご覧ください。
+
 ## プロジェクト構成
 
 ```
@@ -18,19 +40,40 @@ Seminar/
     └── HTTP3/         # HTTP/3クライアント・サーバー（ポート3000）
 ```
 
-## セットアップ
+## 🛠️ セットアップ
 
-### 1. Goモジュールの初期化（初回のみ）
+### 前提条件
+
+- Go 1.24以上
+- Docker & Docker Compose（vol.2の実験環境用）
+- Python 3.x（分析用）
+
+### インストール手順
 
 ```bash
-go mod init seminar
+# 1. リポジトリをクローン（まだの場合）
+git clone https://github.com/Rintaras/Seminar.git
+cd Seminar
+
+# 2. Go モジュールの初期化（クローン後は不要）
+# go mod init seminar  # ← クローンした場合は実行不要
+
+# 3. 依存関係のダウンロード
+go mod download
+
+# 4. Python パッケージのインストール（分析用）
+pip3 install matplotlib pandas seaborn
 ```
 
-### 2. 必要なパッケージのインストール
+### Docker環境のセットアップ（vol.2用）
 
 ```bash
-go get github.com/quic-go/quic-go
-go get golang.org/x/net/http2
+cd vol.2
+docker-compose build
+docker-compose up -d
+
+# 動作確認
+docker ps  # コンテナが起動していることを確認
 ```
 
 ## 実行方法

@@ -9,6 +9,44 @@ HTTP/2とHTTP/3のシンプルなクライアント・サーバー実装と、�
 - **自動化された実験環境**: Docker + tc コマンドによる再現可能なネットワーク条件設定
 - **包括的な分析**: Python（matplotlib）による自動グラフ生成とレポート作成
 
+## 📥 リポジトリのクローン
+
+### 1. リポジトリをクローン
+
+```bash
+git clone https://github.com/Rintaras/Seminar.git
+cd Seminar
+```
+
+### 2. 必要な依存関係のインストール
+
+```bash
+# Go モジュールのダウンロード
+go mod download
+
+# Python パッケージのインストール（分析用）
+pip3 install matplotlib pandas seaborn
+```
+
+### 3. Docker環境のセットアップ（推奨）
+
+```bash
+cd vol.2
+docker-compose build
+docker-compose up -d
+```
+
+### 4. 動作確認
+
+```bash
+# 簡易テスト（3条件）
+./vol.2/auto_benchmark.sh
+
+# または手動テスト
+go run vol.2/HTTP2/client/main.go
+go run vol.2/HTTP3/client/main.go
+```
+
 ## 🚀 クイックスタート
 
 **性能比較実験をすぐに始めたい方は [`QUICKSTART.md`](./QUICKSTART.md) をご覧ください。**
