@@ -75,94 +75,79 @@ echo "========================================="
 echo "✅ ベンチマーク完了"
 echo "========================================="
 
-# Step 3: グラフ生成
+# Step 3: グラフ生成（Docker内で実行、OS非依存）
 echo ""
 echo "========================================="
-echo "📈 Step 3: グラフ生成"
+echo "📈 Step 3: グラフ生成（Docker内で実行）"
 echo "========================================="
 
-# プロジェクトルートに移動
-cd "$SCRIPT_DIR/.."
+# Docker内でグラフ生成を実行（OS非依存）
+DOCKER_SESSION_PATH="/app/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}"
 
-# セッションディレクトリのパスを構築
-LATEST_SESSION="vol.2/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}"
-
-# ディレクトリが存在しない場合は最新のものを探す
-if [ ! -d "$LATEST_SESSION" ]; then
-    LATEST_SESSION=$(ls -td vol.2/results/session_* 2>/dev/null | head -1)
-fi
-
-if [ -n "$LATEST_SESSION" ]; then
-    echo "対象セッション: $LATEST_SESSION"
+echo "Docker内でグラフを生成中..."
+if docker exec benchmark-client python3 /app/scripts/analyze_results.py "$DOCKER_SESSION_PATH"; then
+    echo ""
+    echo "========================================="
+    echo "✅ すべて完了！"
+    echo "========================================="
+    echo ""
     
-    # Python環境の確認
-    if command -v python3 &> /dev/null; then
-        echo "Pythonバージョン: $(python3 --version)"
-        
-        # 必要なパッケージのチェック
-        echo "必要なパッケージをインストール中..."
-        pip3 install --quiet matplotlib pandas seaborn 2>/dev/null || true
-        
-        # グラフ生成
-        echo "グラフを生成中..."
-        if python3 vol.2/scripts/analyze_results.py "$LATEST_SESSION"; then
-            # 成功した場合
-            echo ""
-            echo "========================================="
-            echo "✅ すべて完了！"
-            echo "========================================="
-            echo ""
-            echo "📁 結果ディレクトリ:"
-            echo "   $LATEST_SESSION"
-            echo ""
-            
-            # analysisディレクトリの確認
-            if [ -d "$LATEST_SESSION/analysis" ]; then
-                echo "📊 生成されたグラフ:"
-                ls -lh "$LATEST_SESSION/analysis/" 2>/dev/null | tail -n +2 || echo "   （ファイルリスト取得エラー）"
-                echo ""
-                echo "📄 レポート:"
-                echo "   $LATEST_SESSION/analysis/summary_report.txt"
-                echo ""
-                
-                # サマリーレポートの一部を表示
-                if [ -f "$LATEST_SESSION/analysis/summary_report.txt" ]; then
-                    echo "📋 レポートプレビュー:"
-                    echo "---"
-                    head -30 "$LATEST_SESSION/analysis/summary_report.txt"
-                    echo "---"
-                else
-                    echo "⚠️  summary_report.txt が見つかりません"
-                fi
-            else
-                echo "⚠️  analysisディレクトリが作成されませんでした"
-                echo "   パス: $LATEST_SESSION/analysis"
-            fi
-        else
-            # エラーが発生した場合
-            echo ""
-            echo "❌ グラフ生成に失敗しました"
-            echo ""
-            echo "トラブルシューティング:"
-            echo "  1. 必要なパッケージがインストールされているか確認:"
-            echo "     pip3 install matplotlib pandas seaborn"
-            echo ""
-            echo "  2. 手動でグラフを生成:"
-            echo "     python3 vol.2/scripts/analyze_results.py $LATEST_SESSION"
-            echo ""
-            echo "  3. Pythonのバージョンを確認:"
-            echo "     python3 --version"
-            echo ""
-            echo "データは保存されています:"
-            echo "   $LATEST_SESSION"
-        fi
+    # ホスト側のパスを表示（OS非依存）
+    HOST_SESSION_PATH="$SCRIPT_DIR/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}"
+    echo "📁 結果ディレクトリ（ホスト側）:"
+    echo "   $HOST_SESSION_PATH"
+    echo ""
+    
+    # Docker内でファイルリストを確認
+    echo "📊 生成されたファイル（Docker内）:"
+    docker exec benchmark-client ls -lh "$DOCKER_SESSION_PATH/analysis/" 2>/dev/null | tail -n +2 || echo "   （ファイルリスト取得エラー）"
+    echo ""
+    
+    # サマリーレポートの確認
+    if docker exec benchmark-client test -f "$DOCKER_SESSION_PATH/analysis/summary_report.txt"; then
+        echo "📄 レポート:"
+        echo "   $HOST_SESSION_PATH/analysis/summary_report.txt"
+        echo ""
+        echo "📋 レポートプレビュー:"
+        echo "---"
+        docker exec benchmark-client head -30 "$DOCKER_SESSION_PATH/analysis/summary_report.txt"
+        echo "---"
     else
-        echo "⚠️  Python3が見つかりません"
-        echo "Dockerで生成を試みます..."
-        docker exec benchmark-client python3 /app/scripts/analyze_results.py "/app/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}" || true
+        echo "⚠️  summary_report.txt が見つかりません"
+    fi
+    
+    # OS非依存の結果表示
+    echo ""
+    echo "💡 結果の確認方法:"
+    echo "   - ファイルエクスプローラー/Finderで以下を開く:"
+    echo "     $HOST_SESSION_PATH/analysis/"
+    echo ""
+    echo "   - またはコマンドで確認:"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "     open $HOST_SESSION_PATH/analysis/"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        echo "     xdg-open $HOST_SESSION_PATH/analysis/"
+    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        echo "     explorer $HOST_SESSION_PATH\\analysis\\"
+    else
+        echo "     cd $HOST_SESSION_PATH/analysis/"
     fi
 else
-    echo "❌ セッションディレクトリが見つかりません"
+    echo ""
+    echo "❌ グラフ生成に失敗しました"
+    echo ""
+    echo "トラブルシューティング:"
+    echo "  1. Dockerコンテナが起動しているか確認:"
+    echo "     docker ps | grep benchmark-client"
+    echo ""
+    echo "  2. セッションディレクトリが存在するか確認:"
+    echo "     docker exec benchmark-client ls -la $DOCKER_SESSION_PATH"
+    echo ""
+    echo "  3. 手動でグラフを生成:"
+    echo "     docker exec benchmark-client python3 /app/scripts/analyze_results.py $DOCKER_SESSION_PATH"
+    echo ""
+    echo "データは保存されています:"
+    echo "   $HOST_SESSION_PATH"
 fi
 
 echo ""

@@ -8,6 +8,7 @@ HTTP/2とHTTP/3のシンプルなクライアント・サーバー実装と、�
 - **性能逆転ポイントの特定**: HTTP/2とHTTP/3の優位性が切り替わる境界線を解析
 - **自動化された実験環境**: Docker + tc コマンドによる再現可能なネットワーク条件設定
 - **包括的な分析**: Python（matplotlib）による自動グラフ生成とレポート作成
+- **完全OS非依存**: すべての処理がDocker内で完結し、Windows/macOS/Linuxで同じように動作
 
 ## 📥 リポジトリのクローン
 
@@ -24,8 +25,8 @@ cd Seminar
 # Go モジュールのダウンロード
 go mod download
 
-# Python パッケージのインストール（分析用）
-pip3 install matplotlib pandas seaborn
+# 注意: Pythonのインストールは不要です
+# グラフ生成はDocker内で自動的に実行されます（OS非依存）
 ```
 
 ### 3. Docker環境のセットアップ（推奨）
@@ -569,6 +570,36 @@ python3 vol.2/scripts/analyze_results.py vol.2/results/session_20260113_080000_c
 - `go run`を推奨（`go build`するとバイナリが生成される）
 - Docker環境では`tc`コマンドで正確なネットワーク制御が可能
 
+## 🔄 OS非依存化について
+
+### なぜDocker環境なのにOSの壁があったのか？
+
+**以前の問題点:**
+- ベンチマーク実行: ✅ Docker内で完結（OS非依存）
+- グラフ生成: ❌ ホストOSのPythonに依存（OS依存）
+
+**問題の原因:**
+1. スクリプトがホストOSのPythonを優先的に使用していた
+2. macOS専用の`open`コマンドなど、OS依存のコマンドが含まれていた
+3. ホストOSにPythonがインストールされていない場合、エラーが発生していた
+
+**現在の解決策:**
+- ✅ **すべての処理をDocker内で完結**: ベンチマーク実行もグラフ生成もDocker内で実行
+- ✅ **OS依存コマンドの削除**: `open`コマンドなどのOS依存操作を削除
+- ✅ **統一された環境**: Docker内のPython環境を使用（Alpine Linux + Python3 + matplotlib/pandas/seaborn）
+
+**メリット:**
+- 🎯 **Windows/macOS/Linuxで同じように動作**: OSに関係なく同じ結果が得られる
+- 🎯 **ホストOSにPythonをインストールする必要がない**: Docker内にすべて含まれている
+- 🎯 **環境の一貫性**: 誰が実行しても同じ環境で動作する
+- 🎯 **トラブルシューティングが簡単**: Docker環境の問題に集約される
+
+**技術的な詳細:**
+- DockerfileでPython環境を構築（Alpine Linux + Python3 + 必要なパッケージ）
+- `docker exec benchmark-client python3 ...` でDocker内でグラフ生成を実行
+- ボリュームマウント（`./results:/app/results`）で結果をホストOSと共有
+- OS依存のファイル操作は避け、パス表示のみで対応
+
 ## 🐛 トラブルシューティング
 
 ### ベンチマーク実行後にファイルが保存されない
@@ -710,22 +741,19 @@ lsof -ti:2000,3000 | xargs kill -9
 Get-NetTCPConnection -LocalPort 2000,3000 | Select-Object -ExpandProperty OwningProcess | ForEach-Object {Stop-Process -Id $_ -Force}
 ```
 
-### Python: グラフが生成されない
+### Python: グラフが生成されない（旧バージョンの問題）
 
-**問題**: `python3: command not found`または`ModuleNotFoundError`
+**注意**: 現在のバージョンでは、ホストOSにPythonをインストールする必要はありません。すべてDocker内で実行されます。
 
-**解決方法**:
-```bash
-# Python3をインストール
-# macOS:
-brew install python3
+**問題**: 旧バージョンで`python3: command not found`または`ModuleNotFoundError`が発生していた
 
-# Ubuntu/WSL:
-sudo apt update && sudo apt install python3 python3-pip
-
-# パッケージをインストール
-pip3 install matplotlib pandas seaborn
-```
+**解決方法（現在は不要）**:
+- ✅ **現在のバージョンでは解決済み**: すべてDocker内で実行されるため、ホストOSにPythonは不要です
+- もしエラーが発生する場合は、Dockerコンテナが正しく起動しているか確認してください
+  ```bash
+  docker ps | grep benchmark-client
+  docker exec benchmark-client python3 --version
+  ```
 
 ### Docker: イメージのビルドに失敗する
 
