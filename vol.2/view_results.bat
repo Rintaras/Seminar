@@ -125,7 +125,6 @@ if "%CHOICE%"=="1" (
     echo 📊 グラフを表示しています...
     if exist "%SESSION_PATH%\analysis\ttfb_comparison.png" start "" "%SESSION_PATH%\analysis\ttfb_comparison.png"
     if exist "%SESSION_PATH%\analysis\throughput_comparison.png" start "" "%SESSION_PATH%\analysis\throughput_comparison.png"
-    if exist "%SESSION_PATH%\analysis\ttfb_heatmap.png" start "" "%SESSION_PATH%\analysis\ttfb_heatmap.png"
 ) else if "%CHOICE%"=="3" (
     echo.
     if exist "%SESSION_PATH%\analysis\summary_report.txt" (

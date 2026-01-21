@@ -73,7 +73,6 @@ vol.2/results/session_YYYYMMDD_HHMMSS_実験名/
 ├── analysis/
 │   ├── ttfb_comparison.png        # TTFBグラフ
 │   ├── throughput_comparison.png  # スループットグラフ
-│   ├── ttfb_heatmap.png           # ヒートマップ
 │   └── summary_report.txt         # 詳細レポート
 ├── delay_0ms_bw_unlimited/        # 各実験の生データ
 ├── delay_5ms_bw_unlimited/

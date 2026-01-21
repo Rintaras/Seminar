@@ -5,7 +5,6 @@
 
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 import glob
 import os
 import sys
@@ -217,34 +216,6 @@ def plot_throughput_comparison(df, output_dir):
     print(f"Saved: {output_dir}/throughput_comparison.png")
     plt.close()
 
-def plot_heatmap(df, output_dir):
-    """ヒートマップで性能を可視化"""
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    
-    for idx, protocol in enumerate(['HTTP/2.0', 'HTTP/3.0']):
-        protocol_data = df[df['Protocol'] == protocol]
-        if not protocol_data.empty:
-            pivot = protocol_data.pivot_table(
-                values='TTFB(ms)', 
-                index='NetworkDelay(ms)', 
-                columns='Bandwidth', 
-                aggfunc='mean'
-            )
-            
-            sns.heatmap(pivot, annot=True, fmt='.1f', cmap='YlOrRd', ax=axes[idx], 
-                       cbar_kws={'label': 'TTFB (ms)'})
-            axes[idx].set_title(f'{protocol} - TTFB Heatmap', fontsize=14, fontweight='bold')
-            axes[idx].set_xlabel('Bandwidth Limit', fontsize=12)
-            axes[idx].set_ylabel('Network Delay (ms)', fontsize=12)
-        else:
-            axes[idx].text(0.5, 0.5, f'No data for {protocol}', 
-                          ha='center', va='center', fontsize=14)
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'ttfb_heatmap.png'), dpi=300, bbox_inches='tight')
-    print(f"Saved: {output_dir}/ttfb_heatmap.png")
-    plt.close()
-
 def generate_summary_report(df, output_dir):
     """サマリーレポートを生成"""
     report_path = os.path.join(output_dir, 'summary_report.txt')
@@ -352,11 +323,6 @@ def main():
             plot_throughput_comparison(df, output_dir)
         except Exception as e:
             print(f"Warning: Failed to generate throughput comparison: {e}")
-        
-        try:
-            plot_heatmap(df, output_dir)
-        except Exception as e:
-            print(f"Warning: Failed to generate heatmap: {e}")
         
         try:
             generate_summary_report(df, output_dir)

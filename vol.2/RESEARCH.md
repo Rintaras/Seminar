@@ -199,7 +199,6 @@ python3 vol.2/scripts/analyze_results.py vol.2/results/
 # 以下のファイルが results/analysis/ に生成されます:
 # - ttfb_comparison.png      : TTFBの比較グラフ
 # - throughput_comparison.png: スループットの比較グラフ
-# - ttfb_heatmap.png         : TTFBヒートマップ
 # - summary_report.txt       : サマリーレポート
 ```
 

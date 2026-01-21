@@ -444,7 +444,6 @@ vol.2/results/
 │   └── analysis/                           # 分析結果
 │       ├── ttfb_comparison.png             # TTFBグラフ
 │       ├── throughput_comparison.png       # スループットグラフ
-│       ├── ttfb_heatmap.png                # ヒートマップ
 │       └── summary_report.txt              # サマリーレポート
 ├── 20260113_090000_quick_test_delay0ms_bw_unlimited/  # 単一実験
 │   ├── experiment_info.txt
@@ -469,7 +468,6 @@ python3 vol.2/scripts/analyze_results.py vol.2/results/session_20260113_080000_c
 # 生成される分析結果:
 # - results/analysis/ttfb_comparison.png      # TTFBの比較グラフ
 # - results/analysis/throughput_comparison.png # スループット比較
-# - results/analysis/ttfb_heatmap.png         # 条件別ヒートマップ
 # - results/analysis/summary_report.txt       # テキストレポート
 ```
 

@@ -124,7 +124,6 @@ python3 vol.2/scripts/analyze_results.py vol.2/results/
 **生成されるファイル:**
 - `vol.2/results/analysis/ttfb_comparison.png` - TTFBの比較グラフ
 - `vol.2/results/analysis/throughput_comparison.png` - スループット比較
-- `vol.2/results/analysis/ttfb_heatmap.png` - 条件別ヒートマップ
 - `vol.2/results/analysis/summary_report.txt` - テキストレポート
 
 ### 手動での結果確認
