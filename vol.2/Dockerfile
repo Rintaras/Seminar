@@ -30,7 +30,10 @@ RUN apk add --no-cache \
     py3-pip \
     py3-numpy \
     py3-matplotlib \
-    py3-pandas
+    py3-pandas \
+    font-noto-cjk \
+    font-noto-emoji \
+    ttf-dejavu
 
 WORKDIR /app
 

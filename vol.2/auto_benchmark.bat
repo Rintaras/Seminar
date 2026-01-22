@@ -110,8 +110,8 @@ docker exec benchmark-client bash -c "export PARENT_SESSION_DIR=%SESSION_DIR% &&
 ping 127.0.0.1 -n 3 >nul
 
 echo.
-echo Running experiment: delay_100ms_bw_1mbit (delay=100ms, bandwidth=1mbit)
-docker exec benchmark-client bash -c "export PARENT_SESSION_DIR=%SESSION_DIR% && /app/scripts/run-benchmark.sh 30 https://172.20.0.10:2000/ https://172.20.0.11:3000/ 100 1mbit delay_100ms_bw_1mbit"
+echo Running experiment: delay_100ms_bw_unlimited (delay=100ms, bandwidth=0)
+docker exec benchmark-client bash -c "export PARENT_SESSION_DIR=%SESSION_DIR% && /app/scripts/run-benchmark.sh 30 https://172.20.0.10:2000/ https://172.20.0.11:3000/ 100 0 delay_100ms_bw_unlimited"
 ping 127.0.0.1 -n 3 >nul
 
 REM セッション情報を更新

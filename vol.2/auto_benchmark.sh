@@ -49,7 +49,7 @@ EOF
 
 echo \"Session directory: \$SESSION_DIR\"
 
-conditions=(\"0 0 delay_0ms_bw_unlimited\" \"50 0 delay_50ms_bw_unlimited\" \"100 1mbit delay_100ms_bw_1mbit\")
+conditions=(\"0 0 delay_0ms_bw_unlimited\" \"50 0 delay_50ms_bw_unlimited\" \"100 0 delay_100ms_bw_unlimited\")
 
 for condition in \"\${conditions[@]}\"; do
     read -r delay bandwidth exp_name <<< \"\$condition\"

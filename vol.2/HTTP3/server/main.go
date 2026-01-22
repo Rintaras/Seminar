@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -10,11 +11,32 @@ import (
 	"github.com/quic-go/quic-go/http3"
 )
 
+const (
+	// レスポンスサイズ: 1MB
+	responseSize = 1024 * 1024 // 1MB
+)
+
 func main() {
 	// HTTPハンドラ
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Request: %s %s (Protocol: %s)", r.Method, r.URL.Path, r.Proto)
-		fmt.Fprintf(w, "Hello HTTP/3!\nProtocol: %s\n", r.Proto)
+		
+		// 先頭メッセージ
+		message := fmt.Sprintf("Hello HTTP/3!\nProtocol: %s\n", r.Proto)
+		messageBytes := []byte(message)
+		
+		// 1MBのデータを生成
+		// メッセージ + パディングで1MBにする
+		paddingSize := responseSize - len(messageBytes)
+		if paddingSize < 0 {
+			paddingSize = 0
+		}
+		
+		var buf bytes.Buffer
+		buf.Write(messageBytes)
+		buf.Write(make([]byte, paddingSize))
+		
+		w.Write(buf.Bytes())
 	})
 
 	// 証明書ロードまたは生成
