@@ -143,11 +143,19 @@ cd vol.2
 bash auto_benchmark.sh
 ```
 
-**方法3: Windowsバッチファイル（WSL必須）**
+**方法3: Windowsバッチファイル（Docker Desktop必須）**
 ```cmd
 cd vol.2
 auto_benchmark.bat
 ```
+
+**5Mbps帯域制限ベンチマーク（Windows）**
+```cmd
+cd vol.2
+auto_benchmark_5mbps.bat
+```
+
+**注意**: `auto_benchmark.bat`と`auto_benchmark_5mbps.bat`はWindows上で直接Dockerコマンドを実行します。WSLは不要ですが、Docker Desktopが起動している必要があります。
 
 **注意**: Windowsでは`.sh`ファイルをダブルクリックしても正しく実行されません。必ず上記の方法で実行してください。
 
@@ -554,6 +562,16 @@ python3 vol.2/scripts/analyze_results.py vol.2/results/session_20260113_080000_c
 - **コンテナ**: Docker + Docker Compose
 - **ネットワーク**: カスタムブリッジネットワーク（172.20.0.0/16）
 - **OS**: Alpine Linux（Docker内）
+
+### Windows対応
+- **バッチファイル**: 
+  - `auto_benchmark.bat` - 基本的なベンチマーク（3条件）
+  - `auto_benchmark_5mbps.bat` - 5Mbps帯域制限ベンチマーク（5条件）
+  - Windows上で直接Dockerコマンドを実行
+  - UTF-8コードページ設定（`chcp 65001`）による日本語表示対応
+  - PowerShellを使用した日時取得
+  - Dockerコンテナ内のスクリプト改行コード自動修正（CRLF → LF）
+  - ネットワーク重複エラーの自動解決
 
 ### 実験設計
 - **測定間隔**: 5ms（0-100ms）
