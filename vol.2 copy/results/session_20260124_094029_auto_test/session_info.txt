@@ -1,6 +1,0 @@
-Session Name: auto_test
-Start Time: 2026-01-24 00:40:29
-Requests per condition: 30
-Total conditions: 3
-End Time: 2026-01-24 00:41:03
-Status: Completed
