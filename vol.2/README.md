@@ -61,9 +61,16 @@ go run vol.2/HTTP3/client/main.go
 
 ## 🚀 クイックスタート
 
-**性能比較実験をすぐに始めたい方は [`QUICKSTART.md`](./QUICKSTART.md) をご覧ください。**
+**性能比較実験をすぐに始めたい方は以下のコマンドを実行してください：**
 
-**詳細な研究手法については [`RESEARCH.md`](./RESEARCH.md) をご覧ください。**
+```bash
+cd vol.2
+./auto_benchmark.sh          # macOS/Linux（3条件、約3分）
+auto_benchmark.bat           # Windows（3条件、約3分）
+```
+
+**詳細な研究手法については [`RESEARCH.md`](./RESEARCH.md) をご覧ください。**  
+**実行環境の詳細な図解は [`ARCHITECTURE.md`](./ARCHITECTURE.md) をご覧ください。**
 
 ## プロジェクト構成
 
@@ -92,7 +99,11 @@ vol.2/
 ├── results/                # 実験結果（gitignore）
 ├── Dockerfile              # Dockerイメージ定義
 ├── docker-compose.yml      # Docker環境定義
-├── QUICKSTART.md           # クイックスタートガイド
+├── auto_benchmark.sh       # 自動ベンチマーク（3条件）
+├── auto_benchmark.bat      # 自動ベンチマーク（Windows版）
+├── auto_benchmark_5mbps.sh # 自動ベンチマーク（5Mbps版）
+├── auto_benchmark_5mbps.bat # 自動ベンチマーク（5Mbps版、Windows）
+├── ARCHITECTURE.md         # 実行環境の詳細図解
 └── RESEARCH.md             # 研究詳細ドキュメント
 ```
 
@@ -162,46 +173,16 @@ auto_benchmark_5mbps.bat
 #### Windows: 結果の確認方法
 ベンチマーク実行後、結果を確認するには：
 
-**方法1: PowerShell スクリプト（推奨）**
-```powershell
-# PowerShellで実行（最も高機能）
-cd vol.2
-powershell -ExecutionPolicy Bypass -File view_results.ps1
+**エクスプローラーで直接開く（推奨）**
+```
+vol.2\results\session_YYYYMMDD_HHMMSS_*\analysis\
 ```
 
-**方法2: バッチファイル**
+または、コマンドプロンプトから：
 ```cmd
 cd vol.2
-view_results.bat
+explorer results\session_YYYYMMDD_HHMMSS_*\analysis\
 ```
-
-**方法3: エクスプローラーで直接開く**
-```
-vol.2\results\session_YYYYMMDD_HHMMSS_*\
-```
-
-### 🧪 動作確認テスト（推奨・最初に実行）
-
-ベンチマーク環境が正しくセットアップされているか確認：
-
-```bash
-cd vol.2
-
-# 環境チェック（Windows）
-check_setup.bat
-
-# または環境チェック（macOS/Linux/WSL）
-bash test_benchmark.sh
-```
-
-このテストスクリプトは：
-- ✅ Docker環境を確認
-- ✅ コンテナの起動状態を確認
-- ✅ 簡易ベンチマーク（5リクエスト）を実行
-- ✅ 結果ファイルが正しく保存されるか確認
-- ✅ 問題があれば診断とトラブルシューティングを提示
-
-**問題が見つかった場合は、まずこれを実行してください！**
 
 ### 🚀 クイックテスト（サーバー接続確認）
 
@@ -626,13 +607,10 @@ python3 vol.2/scripts/analyze_results.py vol.2/results/session_20260113_080000_c
 
 1. **環境診断スクリプトを実行**（最優先）
    ```bash
-   # Windows
+   # Dockerコンテナの状態を確認
    cd vol.2
-   debug_docker.bat
-   
-   # macOS/Linux/WSL
-   cd vol.2
-   bash test_benchmark.sh
+   docker ps
+   docker logs benchmark-client
    ```
 
 2. **Docker コンテナの状態を確認**
@@ -670,7 +648,8 @@ docker-compose down -v
 docker system prune -f
 docker-compose build --no-cache
 docker-compose up -d
-bash test_benchmark.sh
+# ベンチマークを実行して動作確認
+./auto_benchmark.sh
 ```
 
 ### Windows: バッチファイル（.bat）をダブルクリックしてもすぐ閉じる
@@ -686,31 +665,18 @@ bash test_benchmark.sh
    # Win+R を押して「cmd」と入力
    cd /d "C:\Users\[ユーザー名]\Documents\Research\Seminar\vol.2"
    
-   # 環境チェック（推奨）
-   check_setup.bat
-   
    # ベンチマーク実行
-   bash auto_benchmark.sh
+   auto_benchmark.bat
    
-   # 結果確認
-   view_results.bat
+   # 結果確認（エクスプローラーで開く）
+   explorer results\session_*\analysis\
    ```
 
 2. **PowerShellから実行**
    ```powershell
    cd "C:\Users\[ユーザー名]\Documents\Research\Seminar\vol.2"
-   bash auto_benchmark.sh
-   powershell -ExecutionPolicy Bypass -File view_results.ps1
+   .\auto_benchmark.bat
    ```
-
-3. **環境チェックスクリプトを実行**
-   ```cmd
-   # vol.2ディレクトリで右クリック → ターミナルで開く
-   check_setup.bat
-   ```
-   このスクリプトが、Docker、WSL、ディレクトリ構造などをチェックして問題を診断します。
-
-📄 **詳細は `WINDOWS_README.txt` を参照してください**
 
 ### Windows: スクリプトをダブルクリックしてもすぐ終了する（.sh）
 
@@ -786,5 +752,5 @@ docker-compose up -d
 
 ## 参考資料
 
-- [`QUICKSTART.md`](./QUICKSTART.md) - 5分で始めるクイックスタートガイド
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) - 実行環境の詳細な図解
 - [`RESEARCH.md`](./RESEARCH.md) - 詳細な研究手法とアーキテクチャ
