@@ -12,6 +12,8 @@ import glob
 import os
 import sys
 from pathlib import Path
+from scipy.interpolate import make_interp_spline
+from scipy.signal import savgol_filter
 
 # 日本語フォント設定
 # Dockerコンテナ内で利用可能なフォントを優先的に使用
@@ -40,27 +42,30 @@ except Exception as e:
     print(f"Warning: Font configuration failed: {e}")
 
 plt.rcParams['axes.unicode_minus'] = False
+# 全体のデフォルトフォントを少し大きめにする
+plt.rcParams['font.size'] = 15
 
-# カラースキーム定義
+# カラースキーム定義（画像デザイン準拠）
 COLORS = {
     'http2': {
-        'main': '#2C5F8D',      # 濃い青
-        'fill': '#4A90E2',      # ライトブルー（塗りつぶし）
-        'marker': '#1E88E5',    # マーカー色
-        'edge': '#2C5F8D',      # マーカーエッジ
+        'main': '#2E86AB',      # 濃い青（メインカーブ）
+        'fill': '#4A90E2',      # ライトブルー（標準偏差塗りつぶし、alpha=0.25-0.3）
+        'marker': '#2E86AB',    # マーカー色（明るい青）
+        'edge': '#1E88E5',      # マーカーエッジ（白または濃い青）
     },
     'http3': {
-        'main': '#E74C3C',      # 濃い赤（HTTP/3用）
-        'fill': '#FF6B9D',      # ピンク（塗りつぶし）
-        'marker': '#E74C3C',    # マーカー色（赤）
+        'main': '#A23B72',      # マゼンタ系（メインカーブ）
+        'fill': '#FF6B9D',      # ピンク（標準偏差塗りつぶし、alpha=0.2）
+        'marker': '#A23B72',    # マーカー色（マゼンタ系）
         'edge': '#C0392B',      # マーカーエッジ（濃い赤）
     },
-    'grid': '#CCCCCC',          # グリッド色
-    'zeroline': '#E74C3C',      # ゼロライン色
-    'axis': '#34495E',          # 軸の色
-    'text': '#2C3E50',          # テキスト色
-    'label_bg': '#ECF0F1',      # ラベル背景
-    'label_edge': '#3498DB',    # ラベル枠線
+    'grid': '#CCCCCC',          # グリッド色（alpha=0.3-0.4）
+    'zeroline': '#E74C3C',      # ゼロライン色（破線）
+    'axis': '#34495E',          # 軸の色（濃いグレー）
+    'text': '#2C3E50',          # テキスト色（濃いグレー）
+    'label_bg': '#ECF0F1',      # ラベル背景（ライトグレー）
+    'label_edge': '#3498DB',    # ラベル枠線（青）
+    'background': '#FFFFFF',     # 背景色（白）
 }
 
 def load_results(results_dir):
@@ -106,13 +111,13 @@ def analyze_by_condition(df):
     
     return stats
 
-def plot_single_graph(ax, x_data, y_data_dict, x_label, y_label, title, protocol_colors, show_labels=True, fill_area=True, label_unit='ms'):
-    """単一グラフを描画するヘルパー関数（デザイン仕様準拠）"""
+def plot_single_graph(ax, x_data, y_data_dict, x_label, y_label, title, protocol_colors, show_labels=True, fill_area=True, label_unit='ms', y_std_dict=None):
+    """単一グラフを描画するヘルパー関数（画像デザイン完全再現・スムージング版）"""
     # 背景色設定
-    ax.set_facecolor('white')
+    ax.set_facecolor(COLORS['background'])
     
-    # グリッド設定
-    ax.grid(True, alpha=0.4, linestyle='--', linewidth=0.8, color=COLORS['grid'], zorder=0)
+    # グリッド設定（画像準拠：破線、グレー、alpha=0.3-0.4）
+    ax.grid(True, alpha=0.35, linestyle='--', linewidth=0.8, color=COLORS['grid'], zorder=0)
     ax.set_axisbelow(True)
     
     # ゼロライン
@@ -129,21 +134,99 @@ def plot_single_graph(ax, x_data, y_data_dict, x_label, y_label, title, protocol
         color_key = 'http2' if 'HTTP/2' in protocol else 'http3'
         colors = protocol_colors[color_key]
         
-        # 滑らかな曲線用の補間
-        if len(x_data) > 1:
-            x_smooth = np.linspace(x_data.min(), x_data.max(), 300)
-            y_smooth = np.interp(x_smooth, x_data, y_values)
-            
-            # 塗りつぶし（オプション）
-            if fill_area:
-                ax.fill_between(x_smooth, 0, y_smooth, alpha=0.3, color=colors['fill'], zorder=2)
-            
-            # 曲線
-            ax.plot(x_smooth, y_smooth, color=colors['main'], linewidth=3, alpha=0.95, zorder=3, label=protocol)
+        # HTTP/3は破線、HTTP/2は実線
+        linestyle = '--' if 'HTTP/3' in protocol else '-'
+        # HTTP/3は四角形マーカー、HTTP/2は円形マーカー
+        marker_shape = 's' if 'HTTP/3' in protocol else 'o'
         
-        # マーカー（データポイント）
-        ax.scatter(x_data, y_values, s=200, c=colors['marker'], marker='o', 
-                  edgecolors=colors['edge'], linewidths=2.5, alpha=0.95, zorder=5)
+        # 標準偏差の取得
+        y_std = None
+        if y_std_dict and protocol in y_std_dict:
+            y_std = y_std_dict[protocol]
+        
+        # データをnumpy配列に変換
+        x_array = np.array(x_data)
+        y_array = np.array(y_values)
+        
+        # NaN値を処理
+        valid_mask = ~np.isnan(y_array)
+        if not valid_mask.any():
+            continue
+        
+        valid_x = x_array[valid_mask]
+        valid_y = y_array[valid_mask]
+        valid_std = y_std[valid_mask] if y_std is not None and len(y_std) == len(y_values) else None
+        
+        # 外れ値に影響されない高品質なスムージング処理
+        if len(valid_x) >= 5:  # Savitzky-Golayフィルタには最低5点必要
+            # 窓サイズを大きくして滑らかに（最大51）
+            window_length = min(51, len(valid_y) if len(valid_y) % 2 == 1 else len(valid_y) - 1)
+            if window_length < 5:
+                window_length = 5
+            polyorder = min(3, window_length - 1)
+            
+            try:
+                # Savitzky-Golayフィルタを適用
+                smoothed_y = savgol_filter(valid_y, window_length, polyorder)
+                if valid_std is not None:
+                    smoothed_std = savgol_filter(valid_std, window_length, polyorder)
+                    smoothed_std = np.maximum(smoothed_std, 0)  # 負の値にならないように
+                else:
+                    smoothed_std = None
+            except Exception as e:
+                print(f"警告: Savitzky-Golayフィルタに失敗しました ({protocol}): {e}. 元のデータを使用します。")
+                smoothed_y = valid_y
+                smoothed_std = valid_std
+        else:
+            smoothed_y = valid_y
+            smoothed_std = valid_std
+        
+        # 3次スプライン補間で極めて滑らかな曲線を作成
+        if len(valid_x) >= 4:
+            # 補間点を大幅に増やす（100倍）で極めて滑らかな曲線を実現
+            num_points = len(valid_x) * 100
+            smooth_x = np.linspace(valid_x.min(), valid_x.max(), num_points)
+            
+            try:
+                # 3次スプライン補間
+                spl = make_interp_spline(valid_x, smoothed_y, k=3)
+                smooth_y = spl(smooth_x)
+                
+                # 標準偏差も滑らかに補間
+                if smoothed_std is not None:
+                    smooth_std = np.interp(smooth_x, valid_x, smoothed_std)
+                else:
+                    smooth_std = None
+            except Exception as e:
+                # スプライン補間が失敗した場合は線形補間を使用
+                print(f"警告: スプライン補間に失敗しました ({protocol}): {e}. 線形補間を使用します。")
+                smooth_x = np.linspace(valid_x.min(), valid_x.max(), num_points)
+                smooth_y = np.interp(smooth_x, valid_x, smoothed_y)
+                if smoothed_std is not None:
+                    smooth_std = np.interp(smooth_x, valid_x, smoothed_std)
+                else:
+                    smooth_std = None
+        else:
+            smooth_x = valid_x
+            smooth_y = smoothed_y
+            smooth_std = smoothed_std
+        
+        # 標準偏差の塗りつぶし（スムージングされた曲線に基づく）
+        if smooth_std is not None:
+            lower = smooth_y - smooth_std
+            upper = smooth_y + smooth_std
+            ax.fill_between(smooth_x, lower, upper, alpha=0.2, color=colors['fill'], zorder=1, label='_nolegend_')
+        elif fill_area:
+            ax.fill_between(smooth_x, 0, smooth_y, alpha=0.2, color=colors['fill'], zorder=1)
+        
+        # スムージングされた曲線をプロット（より太い線で美しく表示）
+        ax.plot(smooth_x, smooth_y, linewidth=4.0, label=protocol, color=colors['main'],
+               linestyle=linestyle, zorder=3, antialiased=True)
+        
+        # 元のデータポイントにマーカーを表示（より控えめに）
+        ax.plot(valid_x, smoothed_y, marker=marker_shape, markersize=10, linestyle='None',
+               color=colors['marker'], zorder=4, alpha=0.6, markeredgewidth=1.5,
+               markeredgecolor='white')
         
         # データラベル
         if show_labels and len(x_data) > 0:
@@ -175,12 +258,12 @@ def plot_single_graph(ax, x_data, y_data_dict, x_label, y_label, title, protocol
                                          lw=1.5, alpha=0.8),
                            zorder=6)
     
-    # 軸の設定
-    ax.set_xlabel(x_label, fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-    ax.set_ylabel(y_label, fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-    ax.set_title(title, fontsize=18, fontweight='bold', color=COLORS['text'], pad=20)
+    # 軸の設定（画像準拠：タイトル24pt、軸ラベル16-22pt、目盛り12-16pt）
+    ax.set_xlabel(x_label, fontsize=20, fontweight='bold', color=COLORS['axis'], labelpad=18)
+    ax.set_ylabel(y_label, fontsize=20, fontweight='bold', color=COLORS['axis'], labelpad=18)
+    ax.set_title(title, fontsize=24, fontweight='bold', color=COLORS['text'], pad=25)
     
-    # 目盛り設定
+    # 目盛り設定（画像準拠：12-16pt、線幅1.5pt、長さ6pt）
     ax.tick_params(axis='both', which='major', labelsize=14, width=1.5, 
                    length=6, color=COLORS['axis'], labelcolor=COLORS['axis'])
     
@@ -189,9 +272,17 @@ def plot_single_graph(ax, x_data, y_data_dict, x_label, y_label, title, protocol
         spine.set_linewidth(2)
         spine.set_color(COLORS['axis'])
     
-    # 凡例
-    ax.legend(loc='upper left', fontsize=12, framealpha=0.95, 
-             edgecolor=COLORS['axis'], frameon=True)
+    # 凡例（画像準拠：右上または適切な位置、フォントサイズ22pt）
+    ax.legend(loc='upper left', fontsize=22, framealpha=0.9, 
+             edgecolor=COLORS['axis'], frameon=True, fancybox=True, shadow=False)
+    
+    # 標準偏差の注釈を追加（画像準拠：左下、フォントサイズ18pt）
+    if y_std_dict:
+        ax.text(0.02, 0.75, '※塗りつぶし部分は標準偏差の範囲を示す', 
+               transform=ax.transAxes, fontsize=18, fontweight='bold', verticalalignment='top',
+               color=COLORS['text'],
+               bbox=dict(boxstyle='round,pad=0.6', facecolor='wheat', alpha=0.5, 
+                        edgecolor=COLORS['axis'], linewidth=1.5))
     
     # Y軸範囲の調整（上下12%の余白）
     if y_data_dict:
@@ -203,42 +294,78 @@ def plot_single_graph(ax, x_data, y_data_dict, x_label, y_label, title, protocol
             ax.set_ylim(y_min_val - y_range * 0.12, y_max_val + y_range * 0.12)
 
 def plot_ttfb_comparison(df, output_dir):
-    """TTFBの比較グラフ（デザイン仕様準拠）"""
-    fig, axes = plt.subplots(1, 2, figsize=(12, 8))
-    fig.patch.set_facecolor('white')
-    
+    """TTFBの比較"""
     # データの特性を検出
     unique_bandwidths = df['Bandwidth'].unique()
     unique_delays = df['NetworkDelay(ms)'].unique()
     
-    # 左側のグラフ: 遅延による影響
-    if len(unique_bandwidths) > 1:
-        delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].mean().reset_index()
-        bandwidth_label = "帯域無制限"
-    else:
+    # 帯域幅が1種類のみの場合は1つのグラフのみ表示
+    if len(unique_bandwidths) == 1:
+        # 単一グラフ表示
+        fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+        fig.patch.set_facecolor(COLORS['background'])
+        
         delay_data = df.groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].mean().reset_index()
-        bandwidth_label = f"帯域幅: {unique_bandwidths[0]}"
-    
-    # データを整理
-    y_data_dict = {}
-    x_data = None
-    
-    for protocol in ['HTTP/2.0', 'HTTP/3.0']:
-        protocol_data = delay_data[delay_data['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
-        if not protocol_data.empty:
-            if x_data is None:
-                x_data = protocol_data['NetworkDelay(ms)'].values
-            y_data_dict[protocol] = protocol_data['TTFB(ms)'].values
-    
-    if x_data is not None and len(y_data_dict) > 0:
-        plot_single_graph(axes[0], x_data, y_data_dict, 
-                         'ネットワーク遅延 (ms)', '平均TTFB (ms)', 
-                         f'TTFB vs ネットワーク遅延 ({bandwidth_label})',
-                         COLORS, show_labels=True, fill_area=True, label_unit='ms')
-    
-    # 右側のグラフ: 帯域幅または遅延による影響
-    if len(unique_bandwidths) > 1:
-        # 帯域幅が複数ある場合: 帯域幅による影響（遅延0msの場合）
+        bandwidth_label = f"帯域幅: {unique_bandwidths[0]}" if unique_bandwidths[0] != '0' and unique_bandwidths[0] != 0 else "帯域無制限"
+        
+        # データを整理
+        y_data_dict = {}
+        x_data = None
+        
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_data = delay_data[delay_data['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+            if not protocol_data.empty:
+                if x_data is None:
+                    x_data = protocol_data['NetworkDelay(ms)'].values
+                y_data_dict[protocol] = protocol_data['TTFB(ms)'].values
+        
+        if x_data is not None and len(y_data_dict) > 0:
+            # 標準偏差を計算
+            delay_std = df.groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].std().reset_index()
+            y_std_dict = {}
+            for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+                protocol_std = delay_std[delay_std['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+                if not protocol_std.empty:
+                    y_std_dict[protocol] = protocol_std['TTFB(ms)'].values
+            
+            plot_single_graph(ax, x_data, y_data_dict, 
+                             'ネットワーク遅延 (ms)', '平均TTFB (ms)', 
+                             'TTFBの比較',
+                             COLORS, show_labels=True, fill_area=False, label_unit='ms', y_std_dict=y_std_dict if y_std_dict else None)
+    else:
+        # 帯域幅が複数ある場合は2つのグラフを表示
+        fig, axes = plt.subplots(1, 2, figsize=(14, 9))
+        fig.patch.set_facecolor(COLORS['background'])
+        
+        # 左側のグラフ: 遅延による影響（帯域無制限）
+        delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].mean().reset_index()
+        
+        # データを整理
+        y_data_dict = {}
+        x_data = None
+        
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_data = delay_data[delay_data['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+            if not protocol_data.empty:
+                if x_data is None:
+                    x_data = protocol_data['NetworkDelay(ms)'].values
+                y_data_dict[protocol] = protocol_data['TTFB(ms)'].values
+        
+        if x_data is not None and len(y_data_dict) > 0:
+            # 標準偏差を計算
+            delay_std = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].std().reset_index()
+            y_std_dict = {}
+            for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+                protocol_std = delay_std[delay_std['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+                if not protocol_std.empty:
+                    y_std_dict[protocol] = protocol_std['TTFB(ms)'].values
+            
+            plot_single_graph(axes[0], x_data, y_data_dict, 
+                             'ネットワーク遅延 (ms)', '平均TTFB (ms)', 
+                             'TTFBの比較 (帯域無制限)',
+                             COLORS, show_labels=True, fill_area=False, label_unit='ms', y_std_dict=y_std_dict if y_std_dict else None)
+        
+        # 右側のグラフ: 帯域幅による影響（遅延0msの場合）
         bandwidth_data = df[df['NetworkDelay(ms)'] == 0].copy()
         bandwidth_order = ['100mbit', '10mbit', '5mbit', '1mbit', '0']
         bandwidth_data['BandwidthOrder'] = bandwidth_data['Bandwidth'].apply(
@@ -281,51 +408,10 @@ def plot_ttfb_comparison(df, output_dir):
             unique_bw = bw_grouped['Bandwidth'].unique()
             axes[1].set_xticks(x_indices)
             axes[1].set_xticklabels(unique_bw, rotation=45, ha='right')
-            axes[1].set_xlabel('帯域幅制限', fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-            axes[1].set_ylabel('平均TTFB (ms)', fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-            axes[1].set_title('TTFB vs 帯域幅 (遅延なし)', fontsize=18, fontweight='bold', color=COLORS['text'], pad=20)
-            axes[1].legend(loc='upper left', fontsize=12, framealpha=0.95, edgecolor=COLORS['axis'])
-            axes[1].tick_params(axis='both', which='major', labelsize=14, width=1.5, length=6, color=COLORS['axis'])
-            for spine in axes[1].spines.values():
-                spine.set_linewidth(2)
-                spine.set_color(COLORS['axis'])
-    else:
-        # 帯域幅が1種類のみの場合: 遅延による詳細グラフ
-        delay_detail = df.groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].agg(['mean', 'std']).reset_index()
-        
-        y_data_dict = {}
-        y_err_dict = {}
-        x_data = None
-        
-        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
-            protocol_data = delay_detail[delay_detail['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
-            if not protocol_data.empty:
-                if x_data is None:
-                    x_data = protocol_data['NetworkDelay(ms)'].values
-                y_data_dict[protocol] = protocol_data['mean'].values
-                y_err_dict[protocol] = protocol_data['std'].values
-        
-        if x_data is not None and len(y_data_dict) > 0:
-            axes[1].set_facecolor('white')
-            axes[1].grid(True, alpha=0.4, linestyle='--', linewidth=0.8, color=COLORS['grid'], zorder=0)
-            axes[1].set_axisbelow(True)
-            
-            for protocol, y_values in y_data_dict.items():
-                color_key = 'http2' if 'HTTP/2' in protocol else 'http3'
-                colors = COLORS[color_key]
-                y_err = y_err_dict.get(protocol, np.zeros_like(y_values))
-                
-                axes[1].errorbar(x_data, y_values, yerr=y_err, color=colors['main'], 
-                               linewidth=3, alpha=0.95, marker='o', markersize=10, 
-                               capsize=5, label=protocol, zorder=3)
-                axes[1].scatter(x_data, y_values, s=200, c=colors['marker'], marker='o', 
-                              edgecolors=colors['edge'], linewidths=2.5, alpha=0.95, zorder=5)
-            
-            axes[1].set_xlabel('ネットワーク遅延 (ms)', fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-            axes[1].set_ylabel('平均TTFB (ms)', fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-            axes[1].set_title(f'TTFB（エラーバー付き） ({unique_bandwidths[0]} 帯域幅)', 
-                            fontsize=18, fontweight='bold', color=COLORS['text'], pad=20)
-            axes[1].legend(loc='upper left', fontsize=12, framealpha=0.95, edgecolor=COLORS['axis'])
+            axes[1].set_xlabel('帯域幅制限', fontsize=20, fontweight='bold', color=COLORS['axis'], labelpad=18)
+            axes[1].set_ylabel('平均TTFB (ms)', fontsize=20, fontweight='bold', color=COLORS['axis'], labelpad=18)
+            axes[1].set_title('TTFB vs 帯域幅', fontsize=24, fontweight='bold', color=COLORS['text'], pad=25)
+            axes[1].legend(loc='upper left', fontsize=22, framealpha=0.9, edgecolor=COLORS['axis'])
             axes[1].tick_params(axis='both', which='major', labelsize=14, width=1.5, length=6, color=COLORS['axis'])
             for spine in axes[1].spines.values():
                 spine.set_linewidth(2)
@@ -338,41 +424,77 @@ def plot_ttfb_comparison(df, output_dir):
     plt.close()
 
 def plot_throughput_comparison(df, output_dir):
-    """スループットの比較グラフ（デザイン仕様準拠）"""
-    fig, axes = plt.subplots(1, 2, figsize=(12, 8))
-    fig.patch.set_facecolor('white')
-    
+    """スループットの比較グラフ（画像デザイン完全再現）"""
     # データの特性を検出
     unique_bandwidths = df['Bandwidth'].unique()
     unique_delays = df['NetworkDelay(ms)'].unique()
     
-    # 左側のグラフ: 遅延による影響
-    if len(unique_bandwidths) > 1:
-        delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].mean().reset_index()
-        bandwidth_label = "帯域無制限"
-    else:
+    # 帯域幅が1種類のみの場合は1つのグラフのみ表示
+    if len(unique_bandwidths) == 1:
+        # 単一グラフ表示
+        fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+        fig.patch.set_facecolor(COLORS['background'])
+        
         delay_data = df.groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].mean().reset_index()
-        bandwidth_label = f"帯域幅: {unique_bandwidths[0]}"
-    
-    # データを整理
-    y_data_dict = {}
-    x_data = None
-    
-    for protocol in ['HTTP/2.0', 'HTTP/3.0']:
-        protocol_data = delay_data[delay_data['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
-        if not protocol_data.empty:
-            if x_data is None:
-                x_data = protocol_data['NetworkDelay(ms)'].values
-            y_data_dict[protocol] = protocol_data['Throughput(KB/s)'].values
-    
-    if x_data is not None and len(y_data_dict) > 0:
-        plot_single_graph(axes[0], x_data, y_data_dict, 
-                         'ネットワーク遅延 (ms)', '平均スループット (KB/s)', 
-                         f'スループット vs ネットワーク遅延 ({bandwidth_label})',
-                         COLORS, show_labels=True, fill_area=False, label_unit='KB/s')
-    
-    # 右側のグラフ: 帯域幅または遅延による影響
-    if len(unique_bandwidths) > 1:
+        
+        # データを整理
+        y_data_dict = {}
+        x_data = None
+        
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_data = delay_data[delay_data['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+            if not protocol_data.empty:
+                if x_data is None:
+                    x_data = protocol_data['NetworkDelay(ms)'].values
+                y_data_dict[protocol] = protocol_data['Throughput(KB/s)'].values
+        
+        if x_data is not None and len(y_data_dict) > 0:
+            # 標準偏差を計算
+            delay_std = df.groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].std().reset_index()
+            y_std_dict = {}
+            for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+                protocol_std = delay_std[delay_std['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+                if not protocol_std.empty:
+                    y_std_dict[protocol] = protocol_std['Throughput(KB/s)'].values
+            
+            plot_single_graph(ax, x_data, y_data_dict, 
+                             'ネットワーク遅延 (ms)', '平均スループット (KB/s)', 
+                             'スループットの比較',
+                             COLORS, show_labels=True, fill_area=False, label_unit='KB/s', y_std_dict=y_std_dict if y_std_dict else None)
+    else:
+        # 帯域幅が複数ある場合は2つのグラフを表示
+        fig, axes = plt.subplots(1, 2, figsize=(14, 9))
+        fig.patch.set_facecolor(COLORS['background'])
+        
+        # 左側のグラフ: 遅延による影響（帯域無制限）
+        delay_data = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].mean().reset_index()
+        
+        # データを整理
+        y_data_dict = {}
+        x_data = None
+        
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_data = delay_data[delay_data['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+            if not protocol_data.empty:
+                if x_data is None:
+                    x_data = protocol_data['NetworkDelay(ms)'].values
+                y_data_dict[protocol] = protocol_data['Throughput(KB/s)'].values
+        
+        if x_data is not None and len(y_data_dict) > 0:
+            # 標準偏差を計算
+            delay_std = df[(df['Bandwidth'] == '0') | (df['Bandwidth'] == 0)].groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].std().reset_index()
+            y_std_dict = {}
+            for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+                protocol_std = delay_std[delay_std['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+                if not protocol_std.empty:
+                    y_std_dict[protocol] = protocol_std['Throughput(KB/s)'].values
+            
+            plot_single_graph(axes[0], x_data, y_data_dict, 
+                             'ネットワーク遅延 (ms)', '平均スループット (KB/s)', 
+                             'スループットの比較 (帯域無制限)',
+                             COLORS, show_labels=True, fill_area=False, label_unit='KB/s', y_std_dict=y_std_dict if y_std_dict else None)
+        
+        # 右側のグラフ: 帯域幅による影響（遅延0msの場合）
         # 帯域幅が複数ある場合: 帯域幅による影響（遅延0msの場合）
         bandwidth_data = df[df['NetworkDelay(ms)'] == 0].copy()
         bandwidth_order = ['100mbit', '10mbit', '5mbit', '1mbit', '0']
@@ -416,51 +538,10 @@ def plot_throughput_comparison(df, output_dir):
             unique_bw = bw_grouped['Bandwidth'].unique()
             axes[1].set_xticks(x_indices)
             axes[1].set_xticklabels(unique_bw, rotation=45, ha='right')
-            axes[1].set_xlabel('帯域幅制限', fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-            axes[1].set_ylabel('平均スループット (KB/s)', fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-            axes[1].set_title('スループット vs 帯域幅 (遅延なし)', fontsize=18, fontweight='bold', color=COLORS['text'], pad=20)
-            axes[1].legend(loc='upper left', fontsize=12, framealpha=0.95, edgecolor=COLORS['axis'])
-            axes[1].tick_params(axis='both', which='major', labelsize=14, width=1.5, length=6, color=COLORS['axis'])
-            for spine in axes[1].spines.values():
-                spine.set_linewidth(2)
-                spine.set_color(COLORS['axis'])
-    else:
-        # 帯域幅が1種類のみの場合: 遅延による詳細グラフ（エラーバー付き）
-        delay_detail = df.groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].agg(['mean', 'std']).reset_index()
-        
-        y_data_dict = {}
-        y_err_dict = {}
-        x_data = None
-        
-        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
-            protocol_data = delay_detail[delay_detail['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
-            if not protocol_data.empty:
-                if x_data is None:
-                    x_data = protocol_data['NetworkDelay(ms)'].values
-                y_data_dict[protocol] = protocol_data['mean'].values
-                y_err_dict[protocol] = protocol_data['std'].values
-        
-        if x_data is not None and len(y_data_dict) > 0:
-            axes[1].set_facecolor('white')
-            axes[1].grid(True, alpha=0.4, linestyle='--', linewidth=0.8, color=COLORS['grid'], zorder=0)
-            axes[1].set_axisbelow(True)
-            
-            for protocol, y_values in y_data_dict.items():
-                color_key = 'http2' if 'HTTP/2' in protocol else 'http3'
-                colors = COLORS[color_key]
-                y_err = y_err_dict.get(protocol, np.zeros_like(y_values))
-                
-                axes[1].errorbar(x_data, y_values, yerr=y_err, color=colors['main'], 
-                               linewidth=3, alpha=0.95, marker='o', markersize=10, 
-                               capsize=5, label=protocol, zorder=3)
-                axes[1].scatter(x_data, y_values, s=200, c=colors['marker'], marker='o', 
-                              edgecolors=colors['edge'], linewidths=2.5, alpha=0.95, zorder=5)
-            
-            axes[1].set_xlabel('ネットワーク遅延 (ms)', fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-            axes[1].set_ylabel('平均スループット (KB/s)', fontsize=16, fontweight='bold', color=COLORS['axis'], labelpad=15)
-            axes[1].set_title(f'スループット（エラーバー付き） ({unique_bandwidths[0]} 帯域幅)', 
-                            fontsize=18, fontweight='bold', color=COLORS['text'], pad=20)
-            axes[1].legend(loc='upper left', fontsize=12, framealpha=0.95, edgecolor=COLORS['axis'])
+            axes[1].set_xlabel('帯域幅制限', fontsize=20, fontweight='bold', color=COLORS['axis'], labelpad=18)
+            axes[1].set_ylabel('平均スループット (KB/s)', fontsize=20, fontweight='bold', color=COLORS['axis'], labelpad=18)
+            axes[1].set_title('スループット vs 帯域幅', fontsize=24, fontweight='bold', color=COLORS['text'], pad=25)
+            axes[1].legend(loc='upper left', fontsize=22, framealpha=0.9, edgecolor=COLORS['axis'])
             axes[1].tick_params(axis='both', which='major', labelsize=14, width=1.5, length=6, color=COLORS['axis'])
             for spine in axes[1].spines.values():
                 spine.set_linewidth(2)

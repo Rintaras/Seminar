@@ -31,6 +31,7 @@ RUN apk add --no-cache \
     py3-numpy \
     py3-matplotlib \
     py3-pandas \
+    py3-scipy \
     font-noto-cjk \
     font-noto-emoji \
     ttf-dejavu

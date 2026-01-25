@@ -70,11 +70,6 @@ echo \"✅ ベンチマーク完了!\"
 echo \"Session: \$SESSION_DIR\"
 "
 
-echo ""
-echo "========================================="
-echo "✅ ベンチマーク完了"
-echo "========================================="
-
 # Step 3: グラフ生成（Docker内で実行、OS非依存）
 echo ""
 echo "========================================="
@@ -92,46 +87,10 @@ if docker exec benchmark-client python3 /app/scripts/analyze_results.py "$DOCKER
     echo "========================================="
     echo ""
     
-    # ホスト側のパスを表示（OS非依存）
+    # ホスト側のパスを表示
     HOST_SESSION_PATH="$SCRIPT_DIR/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}"
-    echo "📁 結果ディレクトリ（ホスト側）:"
-    echo "   $HOST_SESSION_PATH"
-    echo ""
-    
-    # Docker内でファイルリストを確認
-    echo "📊 生成されたファイル（Docker内）:"
-    docker exec benchmark-client ls -lh "$DOCKER_SESSION_PATH/analysis/" 2>/dev/null | tail -n +2 || echo "   （ファイルリスト取得エラー）"
-    echo ""
-    
-    # サマリーレポートの確認
-    if docker exec benchmark-client test -f "$DOCKER_SESSION_PATH/analysis/summary_report.txt"; then
-        echo "📄 レポート:"
-        echo "   $HOST_SESSION_PATH/analysis/summary_report.txt"
-        echo ""
-        echo "📋 レポートプレビュー:"
-        echo "---"
-        docker exec benchmark-client head -30 "$DOCKER_SESSION_PATH/analysis/summary_report.txt"
-        echo "---"
-    else
-        echo "⚠️  summary_report.txt が見つかりません"
-    fi
-    
-    # OS非依存の結果表示
-    echo ""
-    echo "💡 結果の確認方法:"
-    echo "   - ファイルエクスプローラー/Finderで以下を開く:"
-    echo "     $HOST_SESSION_PATH/analysis/"
-    echo ""
-    echo "   - またはコマンドで確認:"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "     open $HOST_SESSION_PATH/analysis/"
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "     xdg-open $HOST_SESSION_PATH/analysis/"
-    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-        echo "     explorer $HOST_SESSION_PATH\\analysis\\"
-    else
-        echo "     cd $HOST_SESSION_PATH/analysis/"
-    fi
+    echo "📁 結果ディレクトリ:"
+    echo "   $HOST_SESSION_PATH/analysis/"
 else
     echo ""
     echo "❌ グラフ生成に失敗しました"
@@ -147,11 +106,6 @@ else
     echo "     docker exec benchmark-client python3 /app/scripts/analyze_results.py $DOCKER_SESSION_PATH"
     echo ""
     echo "データは保存されています:"
-    echo "   $HOST_SESSION_PATH"
+    echo "   $SCRIPT_DIR/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}"
 fi
-
-echo ""
-echo "========================================="
-echo "🎉 処理完了！"
-echo "========================================="
 

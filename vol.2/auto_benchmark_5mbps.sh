@@ -1,5 +1,5 @@
 #!/bin/bash
-# 帯域幅5Mbps制限での自動ベンチマーク＆グラフ生成スクリプト
+# 完全自動ベンチマーク＆グラフ生成スクリプト（5Mbps帯域制限版）
 
 set -e
 
@@ -8,7 +8,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 echo "========================================="
-echo "🚀 5Mbps帯域制限ベンチマーク開始"
+echo "🚀 完全自動テスト開始（5Mbps帯域制限）"
 echo "========================================="
 
 # Step 1: Docker環境再構築
@@ -25,14 +25,14 @@ echo ""
 echo "✅ コンテナ起動状態:"
 docker ps | grep -E "http|benchmark"
 
-# Step 2: ベンチマーク実行（5条件、帯域5Mbps固定）
+# Step 2: ベンチマーク実行（5条件、5Mbps帯域制限）
 echo ""
 echo "========================================="
-echo "📊 Step 2: ベンチマーク実行（5条件、5Mbps制限）"
+echo "📊 Step 2: ベンチマーク実行（5条件、5Mbps帯域制限）"
 echo "========================================="
 
 SESSION_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-SESSION_NAME="5mbps_test"
+SESSION_NAME="auto_test_5mbps"
 
 docker exec benchmark-client bash -c "
 SESSION_TIMESTAMP=$SESSION_TIMESTAMP
@@ -71,11 +71,6 @@ echo \"✅ ベンチマーク完了!\"
 echo \"Session: \$SESSION_DIR\"
 "
 
-echo ""
-echo "========================================="
-echo "✅ ベンチマーク完了"
-echo "========================================="
-
 # Step 3: グラフ生成（Docker内で実行、OS非依存）
 echo ""
 echo "========================================="
@@ -93,46 +88,10 @@ if docker exec benchmark-client python3 /app/scripts/analyze_results.py "$DOCKER
     echo "========================================="
     echo ""
     
-    # ホスト側のパスを表示（OS非依存）
+    # ホスト側のパスを表示
     HOST_SESSION_PATH="$SCRIPT_DIR/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}"
-    echo "📁 結果ディレクトリ（ホスト側）:"
-    echo "   $HOST_SESSION_PATH"
-    echo ""
-    
-    # Docker内でファイルリストを確認
-    echo "📊 生成されたファイル（Docker内）:"
-    docker exec benchmark-client ls -lh "$DOCKER_SESSION_PATH/analysis/" 2>/dev/null | tail -n +2 || echo "   （ファイルリスト取得エラー）"
-    echo ""
-    
-    # サマリーレポートの確認
-    if docker exec benchmark-client test -f "$DOCKER_SESSION_PATH/analysis/summary_report.txt"; then
-        echo "📄 レポート:"
-        echo "   $HOST_SESSION_PATH/analysis/summary_report.txt"
-        echo ""
-        echo "📋 レポートプレビュー:"
-        echo "---"
-        docker exec benchmark-client head -30 "$DOCKER_SESSION_PATH/analysis/summary_report.txt"
-        echo "---"
-    else
-        echo "⚠️  summary_report.txt が見つかりません"
-    fi
-    
-    # OS非依存の結果表示
-    echo ""
-    echo "💡 結果の確認方法:"
-    echo "   - ファイルエクスプローラー/Finderで以下を開く:"
-    echo "     $HOST_SESSION_PATH/analysis/"
-    echo ""
-    echo "   - またはコマンドで確認:"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "     open $HOST_SESSION_PATH/analysis/"
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "     xdg-open $HOST_SESSION_PATH/analysis/"
-    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-        echo "     explorer $HOST_SESSION_PATH\\analysis\\"
-    else
-        echo "     cd $HOST_SESSION_PATH/analysis/"
-    fi
+    echo "📁 結果ディレクトリ:"
+    echo "   $HOST_SESSION_PATH/analysis/"
 else
     echo ""
     echo "❌ グラフ生成に失敗しました"
@@ -148,20 +107,5 @@ else
     echo "     docker exec benchmark-client python3 /app/scripts/analyze_results.py $DOCKER_SESSION_PATH"
     echo ""
     echo "データは保存されています:"
-    echo "   $HOST_SESSION_PATH"
+    echo "   $SCRIPT_DIR/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}"
 fi
-
-echo ""
-echo "========================================="
-echo "🎉 処理完了！"
-echo "========================================="
-echo ""
-echo "📊 実験条件:"
-echo "  - 帯域幅: 5Mbps（固定）"
-echo "  - 遅延: 0, 25, 50, 75, 100ms"
-echo "  - リクエスト数: 各条件30回"
-echo ""
-echo "この帯域制限下でHTTP/2とHTTP/3の性能差を確認できます。"
-echo ""
-
-
