@@ -1,8 +1,0 @@
-Session Name: auto_test
-Start Time: 2026-01-25 15:06:24
-Requests per condition: 30
-Total conditions: 0
-Delays: 0 20 40 60 80 100
-Bandwidths: 無制限 1Mbps 2Mbps 3Mbps
-End Time: 2026-01-25 15:11:08
-Status: Completed
