@@ -30,9 +30,16 @@ vol.2/cert/*.key
 # Cursor IDE
 .cursor/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
 # 実験結果（サンプルを除く）
 vol.2/results/*/
 !vol.2/results/.gitkeep
+vol.3/results/*/
+!vol.3/results/.gitkeep
 
 # Docker
 # (keep .dockerignore in repository)

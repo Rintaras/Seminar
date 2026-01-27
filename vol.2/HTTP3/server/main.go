@@ -20,22 +20,22 @@ func main() {
 	// HTTPハンドラ
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Request: %s %s (Protocol: %s)", r.Method, r.URL.Path, r.Proto)
-		
+
 		// 先頭メッセージ
 		message := fmt.Sprintf("Hello HTTP/3!\nProtocol: %s\n", r.Proto)
 		messageBytes := []byte(message)
-		
+
 		// 1MBのデータを生成
 		// メッセージ + パディングで1MBにする
 		paddingSize := responseSize - len(messageBytes)
 		if paddingSize < 0 {
 			paddingSize = 0
 		}
-		
+
 		var buf bytes.Buffer
 		buf.Write(messageBytes)
 		buf.Write(make([]byte, paddingSize))
-		
+
 		w.Write(buf.Bytes())
 	})
 

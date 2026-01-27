@@ -25,18 +25,18 @@ echo ""
 echo "✅ コンテナ起動状態:"
 docker ps | grep -E "http|benchmark"
 
-# Step 2: ベンチマーク実行（3条件、高速テスト）
+# Step 2: ベンチマーク実行（24条件: 6遅延 × 4帯域幅）
 echo ""
 echo "========================================="
-echo "📊 Step 2: ベンチマーク実行（3条件）"
+echo "📊 Step 2: ベンチマーク実行（24条件）"
 echo "========================================="
 
 SESSION_TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 SESSION_NAME="auto_test"
 
 docker exec benchmark-client bash -c "
-SESSION_TIMESTAMP=$SESSION_TIMESTAMP
-SESSION_NAME=$SESSION_NAME
+SESSION_TIMESTAMP='$SESSION_TIMESTAMP'
+SESSION_NAME='$SESSION_NAME'
 SESSION_DIR=\"/app/results/session_\${SESSION_TIMESTAMP}_\${SESSION_NAME}\"
 mkdir -p \"\$SESSION_DIR\"
 
@@ -45,7 +45,7 @@ DELAYS=(0 20 40 60 80 100)
 BANDWIDTHS=(\"0\" \"1mbit\" \"2mbit\" \"3mbit\")
 BANDWIDTH_NAMES=(\"無制限\" \"1Mbps\" \"2Mbps\" \"3Mbps\")
 
-TOTAL_CONDITIONS=\$((${#DELAYS[@]} * ${#BANDWIDTHS[@]}))
+TOTAL_CONDITIONS=\$((${#DELAYS[@]} * \${#BANDWIDTHS[@]}))
 
 cat > \"\${SESSION_DIR}/session_info.txt\" << EOF
 Session Name: \${SESSION_NAME}
@@ -57,20 +57,7 @@ Bandwidths: \${BANDWIDTH_NAMES[@]}
 EOF
 
 echo \"Session directory: \$SESSION_DIR\"
-
-# 条件を生成
-conditions=()
-for delay in \"\${DELAYS[@]}\"; do
-    for bw_idx in \"\${!BANDWIDTHS[@]}\"; do
-        bandwidth=\"\${BANDWIDTHS[\$bw_idx]}\"
-        if [ \"\$bandwidth\" = \"0\" ]; then
-            exp_name=\"delay_\${delay}ms_bw_unlimited\"
-        else
-            exp_name=\"delay_\${delay}ms_bw_\${bandwidth}\"
-        fi
-        conditions+=(\"\$delay \$bandwidth \$exp_name\")
-    done
-done
+echo \"Total conditions: \${TOTAL_CONDITIONS} (6 delays × 4 bandwidths)\"
 
 current=0
 for bw_idx in \"\${!BANDWIDTHS[@]}\"; do
@@ -96,10 +83,7 @@ for bw_idx in \"\${!BANDWIDTHS[@]}\"; do
         
         echo \"\"
         echo \"▶ Running experiment \$current/\${TOTAL_CONDITIONS}: delay=\${delay}ms, bandwidth=\${bandwidth_name}\"
-        export PARENT_SESSION_DIR=\"\$SESSION_DIR\"
-        export BANDWIDTH_DIR=\"\$BW_DIR\"
-        export DELAY_VALUE=\"\$delay\"
-        /app/scripts/run-benchmark.sh 30 https://172.20.0.10:2000/ https://172.20.0.11:3000/ \"\$delay\" \"\$bandwidth\" \"\$exp_name\" 2>&1 | grep -E '(HTTP/[23]|TTFB|Experiment Directory)'
+        PARENT_SESSION_DIR=\"\$SESSION_DIR\" BANDWIDTH_DIR=\"\$BW_DIR\" DELAY_VALUE=\"\$delay\" /app/scripts/run-benchmark.sh 30 https://172.20.0.10:2000/ https://172.20.0.11:3000/ \"\$delay\" \"\$bandwidth\" \"\$exp_name\" 2>&1 | grep -E '(HTTP/[23]|TTFB|Experiment Directory|Using|Warning)'
         sleep 2
     done
 done
@@ -134,7 +118,20 @@ if docker exec benchmark-client python3 /app/scripts/analyze_results.py "$DOCKER
     # ホスト側のパスを表示
     HOST_SESSION_PATH="$SCRIPT_DIR/results/session_${SESSION_TIMESTAMP}_${SESSION_NAME}"
     echo "📁 結果ディレクトリ:"
-    echo "   $HOST_SESSION_PATH/analysis/"
+    echo "   $HOST_SESSION_PATH/"
+    echo ""
+    echo "📊 生成されたファイル:"
+    echo "   - 各帯域幅ディレクトリ（無制限/1Mbps/2Mbps/3Mbps）:"
+    echo "     • summary_report.txt"
+    echo "     • Experiment/response_time_comparison.png"
+    echo "     • Experiment/crossover_points_summary.png"
+    echo "   - ルートディレクトリ:"
+    echo "     • total_report.txt"
+    echo "   - analysis/ディレクトリ:"
+    echo "     • ttfb_comparison.png"
+    echo "     • throughput_comparison.png"
+    echo "     • total_time_comparison.png"
+    echo "     • summary_report.txt"
 else
     echo ""
     echo "❌ グラフ生成に失敗しました"

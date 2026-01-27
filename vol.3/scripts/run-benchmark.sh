@@ -19,12 +19,16 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 if [ -n "$PARENT_SESSION_DIR" ] && [ -n "$BANDWIDTH_DIR" ] && [ -n "$DELAY_VALUE" ]; then
     # 新しい構造: 帯域幅ディレクトリ/Experiment/遅延ディレクトリ
     EXPERIMENT_DIR="${BANDWIDTH_DIR}/Experiment/${DELAY_VALUE}ms"
+    echo "Using new directory structure: $EXPERIMENT_DIR"
 elif [ -n "$PARENT_SESSION_DIR" ]; then
     # 旧構造との互換性: セッションディレクトリ/実験名
     EXPERIMENT_DIR="${PARENT_SESSION_DIR}/${EXPERIMENT_NAME}"
+    echo "Using old directory structure: $EXPERIMENT_DIR"
+    echo "Warning: BANDWIDTH_DIR or DELAY_VALUE not set. Using old structure."
 else
     # 独立したディレクトリ
     EXPERIMENT_DIR="/app/results/${TIMESTAMP}_${EXPERIMENT_NAME}_delay${DELAY}ms_bw${BANDWIDTH}"
+    echo "Using standalone directory: $EXPERIMENT_DIR"
 fi
 
 mkdir -p $EXPERIMENT_DIR

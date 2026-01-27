@@ -33,16 +33,24 @@ func main() {
 	}
 	defer collector.Close()
 
-	// HTTP/2クライアント作成
+	// HTTP/2クライアント作成（接続再利用を最適化）
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
+		// 接続プールの設定（接続再利用を促進）
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
 	}
 	if err := http2.ConfigureTransport(transport); err != nil {
 		log.Fatal(err)
 	}
-	client := &http.Client{Transport: transport}
+	client := &http.Client{
+		Transport: transport,
+		// タイムアウト設定（HTTP/3と統一）
+		Timeout: 30 * time.Second,
+	}
 
 	fmt.Printf("Starting HTTP/2 benchmark...\n")
 	fmt.Printf("Target: %s\n", *serverURL)

@@ -53,8 +53,8 @@ RUN mkdir -p /app/results
 # 追加のPythonパッケージをインストール
 RUN pip3 install --no-cache-dir seaborn --break-system-packages
 
-# スクリプトのコピー
-COPY vol.2/scripts /app/scripts
+# スクリプトのコピー（vol.3のスクリプトを使用）
+COPY vol.3/scripts /app/scripts
 RUN chmod +x /app/scripts/*.sh
 
 EXPOSE 2000 3000

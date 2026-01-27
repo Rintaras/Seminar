@@ -34,7 +34,7 @@ services:
   benchmark-client:
     build:
       context: ..
-      dockerfile: vol.2/Dockerfile
+      dockerfile: vol.3/Dockerfile
     container_name: benchmark-client
     depends_on:
       - http2-server

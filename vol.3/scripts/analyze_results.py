@@ -128,6 +128,13 @@ def load_results(results_dir):
     
     result_df = pd.concat(dfs, ignore_index=True)
     
+    # Bandwidthカラムを文字列に統一（型の混在を防ぐ）
+    if 'Bandwidth' in result_df.columns:
+        result_df['Bandwidth'] = result_df['Bandwidth'].astype(str)
+        # 数値の0を文字列の'0'に変換
+        result_df.loc[result_df['Bandwidth'] == '0.0', 'Bandwidth'] = '0'
+        result_df.loc[result_df['Bandwidth'] == '0', 'Bandwidth'] = '0'
+    
     # 帯域幅ディレクトリ名からBandwidth値を補完（必要に応じて）
     if 'BandwidthDir' in result_df.columns:
         bandwidth_mapping = {
@@ -137,7 +144,7 @@ def load_results(results_dir):
             '3Mbps': '3mbit'
         }
         for idx, row in result_df.iterrows():
-            if pd.isna(row.get('Bandwidth')) or row.get('Bandwidth') == '':
+            if pd.isna(row.get('Bandwidth')) or row.get('Bandwidth') == '' or row.get('Bandwidth') == 'nan':
                 bw_dir = row.get('BandwidthDir', '')
                 if bw_dir in bandwidth_mapping:
                     result_df.at[idx, 'Bandwidth'] = bandwidth_mapping[bw_dir]
@@ -742,8 +749,12 @@ def find_crossover_points(df, metric='TTFB(ms)'):
     crossover_points = []
     
     # 帯域幅ごとに分析
-    for bandwidth in sorted(df['Bandwidth'].unique()):
-        bw_data = df[df['Bandwidth'] == bandwidth]
+    # Bandwidthを文字列に統一してからソート
+    unique_bandwidths = [str(bw) for bw in df['Bandwidth'].unique()]
+    unique_bandwidths = sorted(set(unique_bandwidths))
+    for bandwidth in unique_bandwidths:
+        # 文字列に統一されたbandwidthでフィルタリング
+        bw_data = df[df['Bandwidth'].astype(str) == bandwidth]
         
         # 遅延ごとに平均値を計算
         delays = sorted(bw_data['NetworkDelay(ms)'].unique())
@@ -897,7 +908,7 @@ def consolidate_bandwidth_csv(results_dir, bandwidth, output_dir, df=None):
     return consolidated_df
 
 def generate_bandwidth_report(df, bandwidth, output_dir):
-    """帯域幅ごとの詳細分析レポートを生成（detailed_analysis_report.txt）"""
+    """帯域幅ごとのサマリーレポートを生成（summary_report.txt）"""
     bandwidth_name = bandwidth if bandwidth != '0' else '無制限'
     if bandwidth == '0':
         bandwidth_name = '無制限'
@@ -910,7 +921,7 @@ def generate_bandwidth_report(df, bandwidth, output_dir):
     else:
         bandwidth_name = bandwidth
     
-    report_path = os.path.join(output_dir, 'detailed_analysis_report.txt')
+    report_path = os.path.join(output_dir, 'summary_report.txt')
     
     bw_data = df[df['Bandwidth'] == bandwidth]
     
@@ -991,8 +1002,8 @@ def generate_bandwidth_report(df, bandwidth, output_dir):
     
     print(f"Saved: {report_path}")
 
-def plot_bandwidth_response_time_comparison(df, bandwidth, output_dir):
-    """帯域幅ごとのResponse Time（Total Time）比較グラフを生成"""
+def plot_bandwidth_ttfb_comparison(df, bandwidth, output_dir):
+    """帯域幅ごとのTTFB比較グラフを生成（帯域幅ディレクトリ直下に）"""
     bandwidth_name = bandwidth if bandwidth != '0' else '無制限'
     if bandwidth == '0':
         bandwidth_name = '無制限'
@@ -1003,7 +1014,61 @@ def plot_bandwidth_response_time_comparison(df, bandwidth, output_dir):
     elif bandwidth == '3mbit':
         bandwidth_name = '3Mbps'
     
-    bw_data = df[df['Bandwidth'] == bandwidth]
+    # 文字列に統一されたbandwidthでフィルタリング
+    bw_data = df[df['Bandwidth'].astype(str) == bandwidth]
+    
+    # TTFBの比較グラフを生成
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    fig.patch.set_facecolor(COLORS['background'])
+    
+    delay_data = bw_data.groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].mean().reset_index()
+    
+    # データを整理
+    y_data_dict = {}
+    x_data = None
+    
+    for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+        protocol_data = delay_data[delay_data['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+        if not protocol_data.empty:
+            if x_data is None:
+                x_data = protocol_data['NetworkDelay(ms)'].values
+            y_data_dict[protocol] = protocol_data['TTFB(ms)'].values
+    
+    if x_data is not None and len(y_data_dict) > 0:
+        # 標準偏差を計算
+        delay_std = bw_data.groupby(['Protocol', 'NetworkDelay(ms)'])['TTFB(ms)'].std().reset_index()
+        y_std_dict = {}
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_std = delay_std[delay_std['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+            if not protocol_std.empty:
+                y_std_dict[protocol] = protocol_std['TTFB(ms)'].values
+        
+        plot_single_graph(ax, x_data, y_data_dict, 
+                         'ネットワーク遅延 (ms)', '平均TTFB (ms)', 
+                         f'TTFB比較 - {bandwidth_name}',
+                         COLORS, show_labels=True, fill_area=False, label_unit='ms', y_std_dict=y_std_dict if y_std_dict else None)
+    
+    plt.tight_layout()
+    output_file = os.path.join(output_dir, 'ttfb_comparison.png')
+    plt.savefig(output_file, dpi=300, 
+                bbox_inches='tight', facecolor='white', pad_inches=0.2)
+    print(f"Saved: {output_file}")
+    plt.close()
+
+def plot_bandwidth_response_time_comparison(df, bandwidth, output_dir):
+    """帯域幅ごとのResponse Time（Total Time）比較グラフを生成（帯域幅ディレクトリ直下に）"""
+    bandwidth_name = bandwidth if bandwidth != '0' else '無制限'
+    if bandwidth == '0':
+        bandwidth_name = '無制限'
+    elif bandwidth == '1mbit':
+        bandwidth_name = '1Mbps'
+    elif bandwidth == '2mbit':
+        bandwidth_name = '2Mbps'
+    elif bandwidth == '3mbit':
+        bandwidth_name = '3Mbps'
+    
+    # 文字列に統一されたbandwidthでフィルタリング
+    bw_data = df[df['Bandwidth'].astype(str) == bandwidth]
     
     # Total Timeの比較グラフを生成
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
@@ -1043,6 +1108,254 @@ def plot_bandwidth_response_time_comparison(df, bandwidth, output_dir):
     print(f"Saved: {output_file}")
     plt.close()
 
+def plot_bandwidth_throughput_comparison(df, bandwidth, output_dir):
+    """帯域幅ごとのスループット比較グラフを生成（帯域幅ディレクトリ直下に）"""
+    bandwidth_name = bandwidth if bandwidth != '0' else '無制限'
+    if bandwidth == '0':
+        bandwidth_name = '無制限'
+    elif bandwidth == '1mbit':
+        bandwidth_name = '1Mbps'
+    elif bandwidth == '2mbit':
+        bandwidth_name = '2Mbps'
+    elif bandwidth == '3mbit':
+        bandwidth_name = '3Mbps'
+    
+    # 文字列に統一されたbandwidthでフィルタリング
+    bw_data = df[df['Bandwidth'].astype(str) == bandwidth]
+    
+    # スループットの比較グラフを生成
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    fig.patch.set_facecolor(COLORS['background'])
+    
+    delay_data = bw_data.groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].mean().reset_index()
+    
+    # データを整理
+    y_data_dict = {}
+    x_data = None
+    
+    for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+        protocol_data = delay_data[delay_data['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+        if not protocol_data.empty:
+            if x_data is None:
+                x_data = protocol_data['NetworkDelay(ms)'].values
+            y_data_dict[protocol] = protocol_data['Throughput(KB/s)'].values
+    
+    if x_data is not None and len(y_data_dict) > 0:
+        # 標準偏差を計算
+        delay_std = bw_data.groupby(['Protocol', 'NetworkDelay(ms)'])['Throughput(KB/s)'].std().reset_index()
+        y_std_dict = {}
+        for protocol in ['HTTP/2.0', 'HTTP/3.0']:
+            protocol_std = delay_std[delay_std['Protocol'] == protocol].sort_values('NetworkDelay(ms)')
+            if not protocol_std.empty:
+                y_std_dict[protocol] = protocol_std['Throughput(KB/s)'].values
+        
+        plot_single_graph(ax, x_data, y_data_dict, 
+                         'ネットワーク遅延 (ms)', '平均スループット (KB/s)', 
+                         f'スループット比較 - {bandwidth_name}',
+                         COLORS, show_labels=True, fill_area=False, label_unit='KB/s', y_std_dict=y_std_dict if y_std_dict else None)
+    
+    plt.tight_layout()
+    output_file = os.path.join(output_dir, 'throughput_comparison.png')
+    plt.savefig(output_file, dpi=300, 
+                bbox_inches='tight', facecolor='white', pad_inches=0.2)
+    print(f"Saved: {output_file}")
+    plt.close()
+
+def generate_bandwidth_crossover_report(df, bandwidth, output_dir):
+    """帯域幅ごとの性能逆転地点レポートを生成（crossover_points_report.txt）"""
+    bandwidth_name = bandwidth if bandwidth != '0' else '無制限'
+    if bandwidth == '0':
+        bandwidth_name = '無制限'
+    elif bandwidth == '1mbit':
+        bandwidth_name = '1Mbps'
+    elif bandwidth == '2mbit':
+        bandwidth_name = '2Mbps'
+    elif bandwidth == '3mbit':
+        bandwidth_name = '3Mbps'
+    
+    # 文字列に統一されたbandwidthでフィルタリング
+    bw_data = df[df['Bandwidth'].astype(str) == bandwidth]
+    
+    report_path = os.path.join(output_dir, 'crossover_points_report.txt')
+    
+    with open(report_path, 'w', encoding='utf-8') as f:
+        f.write("=" * 80 + "\n")
+        f.write(f"HTTP/2 vs HTTP/3 Performance Crossover Points Report - {bandwidth_name}\n")
+        f.write(f"性能逆転地点レポート - {bandwidth_name}\n")
+        f.write("=" * 80 + "\n\n")
+        
+        # TTFBの逆転地点
+        f.write("TTFB (Time To First Byte) 逆転地点:\n")
+        f.write("-" * 80 + "\n")
+        ttfb_crossovers = find_crossover_points(bw_data, 'TTFB(ms)')
+        if ttfb_crossovers:
+            for i, cp in enumerate(ttfb_crossovers, 1):
+                f.write(f"\n逆転地点 #{i}:\n")
+                f.write(f"  方向: {cp['direction']}\n")
+                f.write(f"  推定遅延: {cp['delay']:.2f} ms\n")
+                f.write(f"  HTTP/2 値: {cp['http2_value']:.3f} ms\n")
+                f.write(f"  HTTP/3 値: {cp['http3_value']:.3f} ms\n")
+                f.write(f"  差: {abs(cp['http2_value'] - cp['http3_value']):.3f} ms\n")
+                diff_pct = abs(cp['http2_value'] - cp['http3_value']) / min(cp['http2_value'], cp['http3_value']) * 100
+                f.write(f"  差（%）: {diff_pct:.2f}%\n")
+        else:
+            f.write("\n逆転地点は見つかりませんでした\n")
+        
+        f.write("\n\n" + "=" * 80 + "\n")
+        f.write("Total Time (Response Time) 逆転地点:\n")
+        f.write("-" * 80 + "\n")
+        total_crossovers = find_crossover_points(bw_data, 'TotalTime(ms)')
+        if total_crossovers:
+            for i, cp in enumerate(total_crossovers, 1):
+                f.write(f"\n逆転地点 #{i}:\n")
+                f.write(f"  方向: {cp['direction']}\n")
+                f.write(f"  推定遅延: {cp['delay']:.2f} ms\n")
+                f.write(f"  HTTP/2 値: {cp['http2_value']:.3f} ms\n")
+                f.write(f"  HTTP/3 値: {cp['http3_value']:.3f} ms\n")
+                f.write(f"  差: {abs(cp['http2_value'] - cp['http3_value']):.3f} ms\n")
+                diff_pct = abs(cp['http2_value'] - cp['http3_value']) / min(cp['http2_value'], cp['http3_value']) * 100
+                f.write(f"  差（%）: {diff_pct:.2f}%\n")
+        else:
+            f.write("\n逆転地点は見つかりませんでした\n")
+    
+    print(f"Saved: {report_path}")
+
+def plot_crossover_points_by_bandwidth(df, output_dir):
+    """帯域幅ごとの逆転地点をまとめたグラフを生成（縦軸: 逆転地点の遅延値、横軸: 帯域幅）"""
+    # 帯域幅の順序を定義
+    bandwidth_order = ['0', '1mbit', '2mbit', '3mbit']
+    bandwidth_names = ['無制限', '1Mbps', '2Mbps', '3Mbps']
+    
+    # データを収集
+    ttfb_data = {}  # {bandwidth: [delay_values]}
+    total_time_data = {}  # {bandwidth: [delay_values]}
+    
+    for bw, bw_name in zip(bandwidth_order, bandwidth_names):
+        bw_data = df[df['Bandwidth'].astype(str) == bw]
+        
+        # TTFBの逆転地点
+        ttfb_crossovers = find_crossover_points(bw_data, 'TTFB(ms)')
+        if ttfb_crossovers:
+            ttfb_data[bw_name] = [cp['delay'] for cp in ttfb_crossovers]
+        else:
+            ttfb_data[bw_name] = []
+        
+        # Total Timeの逆転地点
+        total_crossovers = find_crossover_points(bw_data, 'TotalTime(ms)')
+        if total_crossovers:
+            total_time_data[bw_name] = [cp['delay'] for cp in total_crossovers]
+        else:
+            total_time_data[bw_name] = []
+    
+    # グラフを生成
+    fig, axes = plt.subplots(2, 1, figsize=(14, 12))
+    fig.patch.set_facecolor(COLORS['background'])
+    
+    # TTFBの逆転地点グラフ
+    ax1 = axes[0]
+    ax1.set_facecolor(COLORS['background'])
+    ax1.grid(True, alpha=0.35, linestyle='--', linewidth=0.8, color=COLORS['grid'], zorder=0)
+    
+    x_positions = range(len(bandwidth_names))
+    all_ttfb_delays = []
+    
+    for i, bw_name in enumerate(bandwidth_names):
+        if bw_name in ttfb_data and ttfb_data[bw_name]:
+            delays = sorted(ttfb_data[bw_name])
+            all_ttfb_delays.extend(delays)
+            
+            # 複数の逆転地点がある場合はx位置を少しずらす
+            num_points = len(delays)
+            if num_points > 1:
+                # 最大±0.15の範囲でx位置をずらす
+                x_offset_range = 0.15
+                x_offsets = np.linspace(-x_offset_range, x_offset_range, num_points)
+            else:
+                x_offsets = [0]
+            
+            for j, (delay, x_offset) in enumerate(zip(delays, x_offsets)):
+                x_pos = i + x_offset
+                ax1.scatter(x_pos, delay, s=300, c=COLORS['http2']['main'], marker='o', 
+                           edgecolors='white', linewidths=2.5, zorder=5, alpha=0.8)
+                # 値のラベルを追加（位置を調整）
+                label_y_offset = max(delay * 0.05, 2)  # 遅延値の5%または最低2ms
+                ax1.annotate(f'{delay:.2f}ms', (x_pos, delay), 
+                           xytext=(8, label_y_offset), textcoords='offset points', 
+                           fontsize=11, color=COLORS['text'], fontweight='bold',
+                           bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                                   edgecolor=COLORS['http2']['main'], alpha=0.8))
+    
+    ax1.set_xticks(x_positions)
+    ax1.set_xticklabels(bandwidth_names, fontsize=14, fontweight='bold', color=COLORS['axis'])
+    ax1.set_ylabel('逆転地点の遅延値 (ms)', fontsize=16, fontweight='bold', color=COLORS['axis'])
+    ax1.set_xlabel('帯域幅', fontsize=16, fontweight='bold', color=COLORS['axis'])
+    ax1.set_title('TTFB 性能逆転地点 - 帯域幅別', fontsize=20, fontweight='bold', color=COLORS['text'], pad=20)
+    
+    # y軸の範囲を適切に設定
+    if all_ttfb_delays:
+        y_max = max(all_ttfb_delays) * 1.15
+        y_min = max(0, min(all_ttfb_delays) * 0.9)
+        ax1.set_ylim(bottom=y_min, top=y_max)
+    else:
+        ax1.set_ylim(bottom=0)
+    
+    # Total Timeの逆転地点グラフ
+    ax2 = axes[1]
+    ax2.set_facecolor(COLORS['background'])
+    ax2.grid(True, alpha=0.35, linestyle='--', linewidth=0.8, color=COLORS['grid'], zorder=0)
+    
+    all_total_delays = []
+    
+    for i, bw_name in enumerate(bandwidth_names):
+        if bw_name in total_time_data and total_time_data[bw_name]:
+            delays = sorted(total_time_data[bw_name])
+            all_total_delays.extend(delays)
+            
+            # 複数の逆転地点がある場合はx位置を少しずらす
+            num_points = len(delays)
+            if num_points > 1:
+                # 最大±0.15の範囲でx位置をずらす
+                x_offset_range = 0.15
+                x_offsets = np.linspace(-x_offset_range, x_offset_range, num_points)
+            else:
+                x_offsets = [0]
+            
+            for j, (delay, x_offset) in enumerate(zip(delays, x_offsets)):
+                x_pos = i + x_offset
+                ax2.scatter(x_pos, delay, s=300, c=COLORS['http3']['main'], marker='s', 
+                           edgecolors='white', linewidths=2.5, zorder=5, alpha=0.8)
+                # 値のラベルを追加（位置を調整）
+                label_y_offset = max(delay * 0.1, 1)  # 遅延値の10%または最低1ms
+                ax2.annotate(f'{delay:.2f}ms', (x_pos, delay), 
+                           xytext=(8, label_y_offset), textcoords='offset points', 
+                           fontsize=11, color=COLORS['text'], fontweight='bold',
+                           bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                                   edgecolor=COLORS['http3']['main'], alpha=0.8))
+    
+    ax2.set_xticks(x_positions)
+    ax2.set_xticklabels(bandwidth_names, fontsize=14, fontweight='bold', color=COLORS['axis'])
+    ax2.set_ylabel('逆転地点の遅延値 (ms)', fontsize=16, fontweight='bold', color=COLORS['axis'])
+    ax2.set_xlabel('帯域幅', fontsize=16, fontweight='bold', color=COLORS['axis'])
+    ax2.set_title('Total Time 性能逆転地点 - 帯域幅別', fontsize=20, fontweight='bold', color=COLORS['text'], pad=20)
+    
+    # y軸の範囲を適切に設定
+    if all_total_delays:
+        y_max = max(all_total_delays) * 1.15
+        y_min = max(0, min(all_total_delays) * 0.9)
+        # 0に近い値がある場合は、最低でも少し余白を設ける
+        if y_min < 1:
+            y_min = -max(all_total_delays) * 0.05
+        ax2.set_ylim(bottom=y_min, top=y_max)
+    else:
+        ax2.set_ylim(bottom=0)
+    
+    plt.tight_layout()
+    output_file = os.path.join(output_dir, 'crossover_points_by_bandwidth.png')
+    plt.savefig(output_file, dpi=300, 
+                bbox_inches='tight', facecolor='white', pad_inches=0.2)
+    print(f"Saved: {output_file}")
+    plt.close()
+
 def generate_crossover_analysis_report(df, output_dir):
     """逆転地点分析レポートを生成（crossover_analysis_report.txt）"""
     report_path = os.path.join(output_dir, 'crossover_analysis_report.txt')
@@ -1053,8 +1366,11 @@ def generate_crossover_analysis_report(df, output_dir):
         f.write("逆転地点分析レポート\n")
         f.write("=" * 80 + "\n\n")
         
-        # 帯域幅ごとの逆転地点サマリー
-        for bandwidth in sorted(df['Bandwidth'].unique()):
+    # 帯域幅ごとの逆転地点サマリー
+    # Bandwidthを文字列に統一してからソート
+    unique_bandwidths = [str(bw) for bw in df['Bandwidth'].unique()]
+    unique_bandwidths = sorted(set(unique_bandwidths))
+    for bandwidth in unique_bandwidths:
             bandwidth_name = bandwidth if bandwidth != '0' else '無制限'
             if bandwidth == '1mbit':
                 bandwidth_name = '1Mbps'
@@ -1063,7 +1379,8 @@ def generate_crossover_analysis_report(df, output_dir):
             elif bandwidth == '3mbit':
                 bandwidth_name = '3Mbps'
             
-            bw_data = df[df['Bandwidth'] == bandwidth]
+            # 文字列に統一されたbandwidthでフィルタリング
+            bw_data = df[df['Bandwidth'].astype(str) == bandwidth]
             f.write(f"\n{'=' * 80}\n")
             f.write(f"帯域幅: {bandwidth_name}\n")
             f.write(f"{'=' * 80}\n")
@@ -1172,8 +1489,8 @@ def plot_crossover_points_summary(df, output_dir):
     plt.close()
 
 def generate_summary_report(df, output_dir):
-    """総合レポートを生成"""
-    report_path = os.path.join(output_dir, '総合レポート.txt')
+    """総合レポートを生成（total_report.txt）"""
+    report_path = os.path.join(output_dir, 'total_report.txt')
     
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write("=" * 80 + "\n")
@@ -1198,7 +1515,10 @@ def generate_summary_report(df, output_dir):
         f.write("Performance Crossover Points Summary (逆転地点サマリー):\n")
         f.write("=" * 80 + "\n")
         
-        for bandwidth in sorted(df['Bandwidth'].unique()):
+        # Bandwidthを文字列に統一してからソート
+        unique_bandwidths = [str(bw) for bw in df['Bandwidth'].unique()]
+        unique_bandwidths = sorted(set(unique_bandwidths))
+        for bandwidth in unique_bandwidths:
             bandwidth_name = bandwidth if bandwidth != '0' else '無制限'
             if bandwidth == '1mbit':
                 bandwidth_name = '1Mbps'
@@ -1207,7 +1527,8 @@ def generate_summary_report(df, output_dir):
             elif bandwidth == '3mbit':
                 bandwidth_name = '3Mbps'
             
-            bw_data = df[df['Bandwidth'] == bandwidth]
+            # 文字列に統一されたbandwidthでフィルタリング
+            bw_data = df[df['Bandwidth'].astype(str) == bandwidth]
             f.write(f"\n{bandwidth_name}:\n")
             f.write("-" * 80 + "\n")
             
@@ -1304,7 +1625,10 @@ def main():
             traceback.print_exc()
         
         # 帯域幅ごとのレポート、CSV、グラフを生成
-        for bandwidth in sorted(df['Bandwidth'].unique()):
+        # Bandwidthを文字列に統一してからソート
+        unique_bandwidths = [str(bw) for bw in df['Bandwidth'].unique()]
+        unique_bandwidths = sorted(set(unique_bandwidths))
+        for bandwidth in unique_bandwidths:
             try:
                 # 帯域幅ディレクトリを探す
                 bandwidth_name = bandwidth if bandwidth != '0' else '無制限'
@@ -1320,44 +1644,68 @@ def main():
                     # ディレクトリが存在しない場合は作成
                     os.makedirs(bw_dir, exist_ok=True)
                 
-                # 1. CSVファイルを集約
-                print(f"\nConsolidating CSV files for {bandwidth_name}...")
-                consolidate_bandwidth_csv(results_dir, bandwidth, bw_dir, df)
-                
-                # 2. 詳細分析レポートを生成
-                print(f"Generating detailed analysis report for {bandwidth_name}...")
+                # 1. サマリーレポートを生成（各帯域幅ディレクトリ直下に）
+                print(f"\nGenerating summary report for {bandwidth_name}...")
                 generate_bandwidth_report(df, bandwidth, bw_dir)
                 
-                # 3. Response Time比較グラフを生成
+                # 2. TTFB比較グラフを生成（各帯域幅ディレクトリ直下に）
+                print(f"Generating TTFB comparison graph for {bandwidth_name}...")
+                try:
+                    plot_bandwidth_ttfb_comparison(df, bandwidth, bw_dir)
+                except Exception as e:
+                    print(f"Warning: Failed to generate TTFB comparison for {bandwidth_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
+                # 3. Response Time比較グラフを生成（各帯域幅ディレクトリ直下に）
                 print(f"Generating response time comparison graph for {bandwidth_name}...")
-                plot_bandwidth_response_time_comparison(df, bandwidth, bw_dir)
+                try:
+                    plot_bandwidth_response_time_comparison(df, bandwidth, bw_dir)
+                except Exception as e:
+                    print(f"Warning: Failed to generate response time comparison for {bandwidth_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
+                # 4. スループット比較グラフを生成（各帯域幅ディレクトリ直下に）
+                print(f"Generating throughput comparison graph for {bandwidth_name}...")
+                try:
+                    plot_bandwidth_throughput_comparison(df, bandwidth, bw_dir)
+                except Exception as e:
+                    print(f"Warning: Failed to generate throughput comparison for {bandwidth_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
+                # 5. 性能逆転地点レポートを生成（各帯域幅ディレクトリ直下に）
+                print(f"Generating crossover points report for {bandwidth_name}...")
+                try:
+                    generate_bandwidth_crossover_report(df, bandwidth, bw_dir)
+                except Exception as e:
+                    print(f"Warning: Failed to generate crossover points report for {bandwidth_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
                 
             except Exception as e:
                 print(f"Warning: Failed to generate reports for {bandwidth}: {e}")
                 import traceback
                 traceback.print_exc()
         
-        # ルートレベルに逆転地点分析を生成
-        print("\nGenerating crossover analysis...")
+        # 総合レポートを生成（ルートディレクトリにtotal_report.txt）
+        print("\nGenerating total report...")
         try:
-            generate_crossover_analysis_report(df, results_dir)
+            generate_summary_report(df, results_dir)
         except Exception as e:
-            print(f"Warning: Failed to generate crossover analysis report: {e}")
+            print(f"Warning: Failed to generate total report: {e}")
             import traceback
             traceback.print_exc()
         
+        # 帯域幅別の逆転地点グラフを生成（sessionディレクトリ直下に）
+        print("\nGenerating crossover points by bandwidth graph...")
         try:
-            plot_crossover_points_summary(df, results_dir)
+            plot_crossover_points_by_bandwidth(df, results_dir)
         except Exception as e:
-            print(f"Warning: Failed to generate crossover points summary: {e}")
+            print(f"Warning: Failed to generate crossover points by bandwidth graph: {e}")
             import traceback
             traceback.print_exc()
-        
-        # 総合レポートを生成（analysisディレクトリに）
-        try:
-            generate_summary_report(df, output_dir)
-        except Exception as e:
-            print(f"Warning: Failed to generate summary report: {e}")
         
         print("\n" + "=" * 80)
         print("Analysis completed!")
